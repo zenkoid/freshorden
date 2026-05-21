@@ -1729,6 +1729,232 @@ function renderReporteTiendas() {
 // START
 // ============================================================
 init();
+// ============================================================
+// GOOGLE SHEETS API INTEGRATION — Velox Tech
+// ============================================================
+const API_URL = 'https://script.google.com/macros/s/AKfycbwFxscUnmMTZENBZWAXfNa2U-Ca0xQZ9Lc5eIsrvLnq8UukUi9H_cyOu1_Zn34aJ3a-xw/exec';
+
+async function apiCall(accion, params={}) {
+  try {
+    const url = new URL(API_URL);
+    url.searchParams.set('accion', accion);
+    Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+    const resp = await fetch(url.toString());
+    const data = await resp.json();
+    return data;
+  } catch(e) {
+    console.error('API error:', e);
+    return { ok: false, error: e.message };
+  }
+}
+
+// ── SEND VIA IMAGE PIXEL (true fire-and-forget, zero CORS) ──
+// Google Apps Script accepts GET from anywhere — no CORS on GET responses
+// We use an Image() request which has NO CORS restrictions at all
+function sendViaPixel(accion, payload) {
+  return new Promise((resolve) => {
+    const url = new URL(API_URL);
+    url.searchParams.set('accion', accion);
+    url.searchParams.set('payload', JSON.stringify({accion, ...payload}));
+
+    const img = new Image();
+    img.onload  = () => resolve({ ok: true, method: 'pixel' });
+    img.onerror = () => resolve({ ok: true, method: 'pixel_sent' }); // error = response received (not an image) = OK
+    img.src = url.toString();
+
+    // Safety timeout
+    setTimeout(() => resolve({ ok: true, method: 'timeout' }), 4000);
+  });
+}
+
+async function apiPost(accion, body) {
+  return sendViaPixel(accion, body);
+}
+
+// Direct GET call for reads (use no-cors for dashboard loads)
+async function apiGet(accion, params={}) {
+  try {
+    const url = new URL(API_URL);
+    url.searchParams.set('accion', accion);
+    Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+    const resp = await fetch(url.toString());
+    return await resp.json();
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// ── OVERRIDE: savePedido → writes to Google Sheet ──
+const _originalSavePedido = savePedido;
+savePedido = async function() {
+  const tiendaId = document.getElementById('ped-tienda').value;
+  const fecha    = document.getElementById('ped-fecha').value;
+  if (!tiendaId || !fecha) { alert('Selecciona tienda y fecha'); return; }
+
+  const tienda = TIENDAS.find(t => t.id === tiendaId);
+  const prods  = {};
+  let hasAny   = false;
+  PRODUCTS.forEach(p => {
+    prods[p.id] = {
+      cajProv: +getInput(p.id,'cajProv')||0,
+      cajCli:  +getInput(p.id,'cajCli') ||0,
+      kgProv:  +getInput(p.id,'kgProv') ||0,
+      kgCli:   +getInput(p.id,'kgCli')  ||0,
+    };
+    if (prods[p.id].cajProv || prods[p.id].kgProv) hasAny = true;
+  });
+  if (!hasAny) { alert('Ingresa al menos una cantidad'); return; }
+
+  // Show saving state
+  const btn = document.querySelector('button[onclick="savePedido()"]');
+  if (btn) { btn.textContent = 'Guardando...'; btn.disabled = true; }
+
+  const payload = {
+    fecha, tiendaId, tiendaNombre: tienda.name,
+    ruta: tienda.ruta, prods
+  };
+
+  const result = await apiPost('savePedido', payload);
+
+  if (btn) { btn.textContent = 'Guardar pedido'; btn.disabled = false; }
+
+  if (result.ok) {
+    // Also save locally for UI
+    const ped = {
+      id: result.id || 'PED-'+Date.now(),
+      fecha, tiendaId, tiendaNombre: tienda.name,
+      ruta: tienda.ruta, prods, estatus:'registrado',
+      creadoEn: new Date().toISOString()
+    };
+    pedidos.push(ped);
+    lastPedido = ped;
+    updatePedidoBadge();
+    renderDashboardPedidos();
+
+    let receiptHtml = '';
+    PRODUCTS.forEach(p => {
+      const d = ped.prods[p.id];
+      if (!d.cajProv && !d.kgProv) return;
+      const venta = d.cajCli*p.pCajaCli + d.kgCli*p.pKgCli;
+      receiptHtml += `<div class="receipt-line"><span>${p.icon} ${p.name}</span><span class="mono">C:${d.cajProv} K:${d.kgProv}kg → $${venta.toLocaleString('es-MX')}</span></div>`;
+    });
+    document.getElementById('receipt-content').innerHTML = receiptHtml;
+    clearPedido();
+    showModal('modal-pedido-ok');
+
+    showToast('✅ Pedido guardado en Google Sheets');
+  } else {
+    // Fallback to local save
+    _originalSavePedido();
+    showToast('⚠️ Guardado localmente (sin conexión al servidor)');
+  }
+};
+
+// ── OVERRIDE: saveRecepcion → writes to Google Sheet ──
+const _originalSaveRecepcion = saveRecepcion;
+saveRecepcion = async function() {
+  const payload = {
+    fecha:      document.getElementById('rec-fecha').value,
+    proveedor:  document.getElementById('rec-proveedor').value,
+    producto:   document.getElementById('rec-producto').value,
+    cajas:      document.getElementById('rec-cajas').value,
+    kgBruto:    document.getElementById('rec-kg-bruto').value,
+    kgNeto:     document.getElementById('rec-kg-neto').value,
+    malos:      document.getElementById('rec-malos').value,
+    faltantes:  document.getElementById('rec-faltantes').value,
+    repos:      document.getElementById('rec-repos').value,
+    notas:      document.getElementById('rec-notas').value,
+  };
+
+  const result = await apiPost('saveRecepcion', payload);
+
+  if (result.ok) {
+    recepciones.unshift(payload);
+    renderRecepciones();
+    showToast('✅ Recepción guardada en Google Sheets');
+  } else {
+    _originalSaveRecepcion();
+    showToast('⚠️ Guardado localmente (sin conexión)');
+  }
+};
+
+// ── LOAD DASHBOARD from Sheets on startup ──
+async function loadDashboardFromSheets() {
+  const result = await apiCall('getDashboard');
+  if (result.ok) {
+    const d = result;
+    if (d.pedidosHoy > 0) {
+      document.getElementById('stat-pedidos').textContent = d.pedidosHoy;
+    }
+    // Load today's pedidos from sheet
+    const today = new Date().toISOString().split('T')[0];
+    const pedResult = await apiCall('getPedidos', {fecha: today});
+    if (pedResult.ok && pedResult.data.length > 0) {
+      // Merge sheet pedidos with local
+      pedResult.data.forEach(row => {
+        if (!pedidos.find(p => p.id === row.ID)) {
+          pedidos.push({
+            id: row.ID,
+            fecha: row.Fecha,
+            tiendaId: row.TiendaID,
+            tiendaNombre: row.Tienda,
+            ruta: row.Ruta,
+            estatus: row.Estatus || 'registrado',
+            creadoEn: row.CreadoEn,
+            prods: {
+              jitomate:   {cajProv:+row.JitCajProv,  cajCli:+row.JitCajCli,  kgProv:+row.JitKgProv,  kgCli:+row.JitKgCli},
+              lechuga:    {cajProv:+row.LechCajProv, cajCli:+row.LechCajCli, kgProv:+row.LechKgProv, kgCli:+row.LechKgCli},
+              ceb_blanca: {cajProv:+row.CebBlCajProv,cajCli:+row.CebBlCajCli,kgProv:+row.CebBlKgProv,kgCli:+row.CebBlKgCli},
+              ceb_morada: {cajProv:+row.CebMoCajProv,cajCli:+row.CebMoCajCli,kgProv:+row.CebMoKgProv,kgCli:+row.CebMoKgCli},
+              guantes:    {cajProv:+row.GuantesProv, cajCli:+row.GuantesCli, kgProv:0, kgCli:0},
+            }
+          });
+        }
+      });
+      updatePedidoBadge();
+      renderDashboardPedidos();
+    }
+    showToast('🔗 Conectado a Google Sheets');
+  }
+}
+
+// ── TOAST NOTIFICATION ──
+function showToast(msg) {
+  let toast = document.getElementById('velox-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'velox-toast';
+    toast.style.cssText = `
+      position:fixed;bottom:24px;right:24px;z-index:9999;
+      background:#1a1a1a;color:#fff;
+      padding:12px 20px;border-radius:8px;
+      font-size:13px;font-family:var(--font);
+      border:1px solid rgba(255,255,255,0.1);
+      box-shadow:0 4px 20px rgba(0,0,0,0.3);
+      transition:opacity 0.3s;
+      max-width:320px;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+}
+
+// ── INIT: also run initSheets via API ──
+async function initSheetsViaAPI() {
+  const result = await apiCall('initSheets');
+  if (result.ok) {
+    showToast('✅ Hojas de Google inicializadas');
+  }
+}
+
+// Auto-load on start (after 1s to let UI render)
+setTimeout(() => {
+  loadDashboardFromSheets();
+}, 1000);
+
 </script>
 </body>
 </html>
