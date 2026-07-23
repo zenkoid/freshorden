@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.2</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.3</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -456,7 +456,12 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
     </div>
     <div class="login-field">
       <label class="form-label">Contraseña</label>
-      <input type="password" class="form-input" id="login-pass" style="width:100%" autocomplete="current-password" placeholder="••••••••">
+      <div style="position:relative">
+        <input type="password" class="form-input" id="login-pass" style="width:100%;padding-right:36px" autocomplete="current-password" placeholder="••••••••">
+        <button type="button" id="toggle-login-pass" onclick="toggleLoginPass()"
+                style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:var(--gray-500);padding:4px"
+                aria-label="Mostrar contraseña" title="Mostrar contraseña">👁️</button>
+      </div>
     </div>
     <button class="topbar-btn primary login-btn" onclick="doLogin()">Ingresar</button>
     <div class="login-error" id="login-error"></div>
@@ -2223,6 +2228,15 @@ async function checkSession() {
   document.getElementById('login-overlay').style.display = 'flex';
   document.getElementById('app-root').style.display = 'none';
   return false;
+}
+
+function toggleLoginPass() {
+  const input = document.getElementById('login-pass');
+  const btn = document.getElementById('toggle-login-pass');
+  const mostrando = input.type === 'text';
+  input.type = mostrando ? 'password' : 'text';
+  btn.textContent = mostrando ? '👁️' : '🙈';
+  btn.title = mostrando ? 'Mostrar contraseña' : 'Ocultar contraseña';
 }
 
 async function doLogin() {
