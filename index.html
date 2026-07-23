@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.4.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.5.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -714,10 +714,22 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       <div class="tab-pane" id="tab-historial" data-group="pedidos-tabs">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Historial — últimos 5 pedidos</div>
+            <div class="card-title">Historial de pedidos</div>
           </div>
           <div class="card-body">
             <div class="form-row">
+              <div class="form-group" id="hist-fecha-group">
+                <label class="form-label">Fecha</label>
+                <input type="date" class="form-input" id="hist-fecha" onchange="renderHistorial()">
+              </div>
+              <div class="form-group" id="hist-mes-group" style="display:none">
+                <label class="form-label">Mes</label>
+                <select class="form-select" id="hist-mes" onchange="renderHistorial()">
+                  <option value="actual">Mes actual</option>
+                  <option value="anterior">Mes anterior</option>
+                  <option value="dos_atras">2 meses atrás</option>
+                </select>
+              </div>
               <div class="form-group" id="hist-tienda-group">
                 <label class="form-label">Tienda</label>
                 <select class="form-select" id="hist-tienda" onchange="renderHistorial()">
@@ -1136,8 +1148,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       <div class="receipt" id="receipt-content"></div>
     </div>
     <div class="modal-footer">
-      <button class="topbar-btn" onclick="closeModal('modal-pedido-ok')">Cerrar</button>
-      <button class="topbar-btn primary" onclick="closeModal('modal-pedido-ok');showSection('prefactura')">Generar Pre-Factura</button>
+      <button class="topbar-btn primary" onclick="closeModal('modal-pedido-ok')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -1265,6 +1276,10 @@ function applyRoleUI() {
   if (titleEl) titleEl.style.display = isSucursal ? 'none' : '';
   const histTiendaGroup = document.getElementById('hist-tienda-group');
   if (histTiendaGroup) histTiendaGroup.style.display = isSucursal ? 'none' : '';
+  const histFechaGroup = document.getElementById('hist-fecha-group');
+  const histMesGroup = document.getElementById('hist-mes-group');
+  if (histFechaGroup) histFechaGroup.style.display = isSucursal ? 'none' : '';
+  if (histMesGroup) histMesGroup.style.display = isSucursal ? '' : 'none';
   if (subtitleEl) {
     subtitleEl.style.fontSize = isSucursal ? '18px' : '';
     subtitleEl.style.color = isSucursal ? 'var(--gray-900)' : '';
@@ -1301,6 +1316,8 @@ function init() {
   // Set dates
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('rec-fecha').value = today;
+  const histFechaInput = document.getElementById('hist-fecha');
+  if (histFechaInput) histFechaInput.value = today;
   const f = new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
   document.getElementById('fecha-sidebar').textContent = f.charAt(0).toUpperCase()+f.slice(1);
   document.getElementById('ped-fecha-display').value = f.charAt(0).toUpperCase()+f.slice(1);
@@ -1948,13 +1965,27 @@ async function renderHistorial() {
   let query = sb
     .from('pedidos')
     .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
-    .order('creado_en', { ascending: false })
-    .limit(5);
+    .order('creado_en', { ascending: false });
 
   if (currentUser.rol === 'sucursal' && currentUser.tiendaId) {
     query = query.eq('sucursal_id', currentUser.tiendaId);
-  } else if (tiendaFilter) {
-    query = query.eq('sucursal_id', tiendaFilter);
+
+    // Filtro por mes: Mes actual / Mes anterior / 2 meses atrás, a partir de HOY
+    const mesSel = document.getElementById('hist-mes');
+    const mesVal = mesSel ? mesSel.value : 'actual';
+    const offsetMeses = mesVal === 'anterior' ? 1 : (mesVal === 'dos_atras' ? 2 : 0);
+    const hoy = new Date();
+    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth() - offsetMeses, 1);
+    const finMes = new Date(hoy.getFullYear(), hoy.getMonth() - offsetMeses + 1, 0);
+    const fmt = d => d.toISOString().split('T')[0];
+    query = query.gte('fecha', fmt(inicioMes)).lte('fecha', fmt(finMes));
+  } else {
+    if (tiendaFilter) query = query.eq('sucursal_id', tiendaFilter);
+
+    // Filtro por fecha exacta (día por día) para Bodega/Admin/Gerencia
+    const fechaEl = document.getElementById('hist-fecha');
+    const fechaVal = fechaEl ? fechaEl.value : '';
+    if (fechaVal) query = query.eq('fecha', fechaVal);
   }
 
   const { data, error } = await query;
@@ -2219,7 +2250,38 @@ async function savePedido() {
     precio_unitario: p.pCli,
   })).filter(l => l.cant_solicitada > 0);
 
-  if (!lineas.length) { alert('Ingresa al menos una cantidad'); return; }
+  if (!lineas.length) {
+    if (!pedidoHoyId) {
+      // No existe pedido aún hoy: no tiene sentido crear uno vacío
+      alert('Ingresa al menos una cantidad');
+      return;
+    }
+    // Ya existe un pedido capturado hoy: dejarlo todo en ceros = CANCELAR el pedido
+    // (solo posible mientras Bodega no lo haya surtido; los campos ya están
+    // deshabilitados por cargarPedidoHoy() en cualquier otro estatus).
+    const confirmaCancelar = confirm(
+      'Vas a guardar el pedido con todas las cantidades en cero.\n\n' +
+      'Esto CANCELA tu pedido de hoy — quedará como "Sin pedido hoy".\n\n' +
+      '¿Confirmas que deseas cancelarlo?'
+    );
+    if (!confirmaCancelar) return;
+
+    const btnCancelar = document.getElementById('btn-guardar-pedido');
+    btnCancelar.textContent = 'Cancelando...'; btnCancelar.disabled = true;
+
+    await sb.from('pedido_detalle').delete().eq('pedido_id', pedidoHoyId);
+    const { error: errCancelar } = await sb.from('pedidos').delete().eq('id', pedidoHoyId);
+
+    btnCancelar.textContent = 'Guardar pedido'; btnCancelar.disabled = false;
+
+    if (errCancelar) { showToast('⚠️ Error al cancelar pedido: ' + errCancelar.message); return; }
+
+    pedidoHoyId = null;
+    showToast('🗑️ Pedido cancelado — Sin pedido hoy');
+    await cargarPedidoHoy();
+    await cargarPedidosDelDia();
+    return;
+  }
 
   const btn = document.getElementById('btn-guardar-pedido');
   btn.textContent = 'Guardando...'; btn.disabled = true;
