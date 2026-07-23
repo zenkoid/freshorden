@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.4</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.5</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -718,6 +718,12 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
           </div>
           <div class="card-body">
             <div class="form-row">
+              <div class="form-group" id="hist-tienda-group">
+                <label class="form-label">Tienda</label>
+                <select class="form-select" id="hist-tienda" onchange="renderHistorial()">
+                  <option value="">Todas</option>
+                </select>
+              </div>
               <div class="form-group">
                 <label class="form-label">Producto</label>
                 <select class="form-select" id="hist-prod" onchange="renderHistorial()">
@@ -1256,6 +1262,8 @@ function applyRoleUI() {
   if (btnRecibir) btnRecibir.style.display = (isSucursal || isBodega) ? 'none' : '';
   if (btnNuevoTop) btnNuevoTop.style.display = (isSucursal || isBodega) ? 'none' : '';
   if (titleEl) titleEl.style.display = isSucursal ? 'none' : '';
+  const histTiendaGroup = document.getElementById('hist-tienda-group');
+  if (histTiendaGroup) histTiendaGroup.style.display = isSucursal ? 'none' : '';
   if (subtitleEl) {
     subtitleEl.style.fontSize = isSucursal ? '18px' : '';
     subtitleEl.style.color = isSucursal ? 'var(--gray-900)' : '';
@@ -1300,7 +1308,7 @@ function init() {
     : 'Todas / N-A';
 
   // Populate tienda selects (pantallas de admin/gerencia que sí requieren elegir tienda)
-  const tiendaSelects = document.querySelectorAll('#pf-tienda');
+  const tiendaSelects = document.querySelectorAll('#pf-tienda, #hist-tienda');
   tiendaSelects.forEach(sel => {
     TIENDAS.forEach(t => {
       const o = document.createElement('option');
@@ -1882,16 +1890,20 @@ async function renderHistorial() {
   const el = document.getElementById('historial-table');
   if (!currentUser) return;
   const prodFilter = document.getElementById('hist-prod').value;
+  const tiendaFilterEl = document.getElementById('hist-tienda');
+  const tiendaFilter = tiendaFilterEl ? tiendaFilterEl.value : '';
   el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
 
   let query = sb
     .from('pedidos')
-    .select('id, fecha, estatus, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
+    .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
     .order('creado_en', { ascending: false })
     .limit(5);
 
   if (currentUser.rol === 'sucursal' && currentUser.tiendaId) {
     query = query.eq('sucursal_id', currentUser.tiendaId);
+  } else if (tiendaFilter) {
+    query = query.eq('sucursal_id', tiendaFilter);
   }
 
   const { data, error } = await query;
