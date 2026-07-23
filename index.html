@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.2.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -601,6 +601,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
     <div class="section" id="section-pedidos">
       <div class="tabs" id="pedidos-tabs-nav">
         <button class="tab-btn active" id="tab-btn-nuevo" onclick="switchTab('tab-nuevopedido','pedidos-tabs',this)">Nuevo pedido</button>
+        <button class="tab-btn" id="tab-btn-surtir" onclick="switchTab('tab-surtir','pedidos-tabs',this)">Surtir pedido</button>
         <button class="tab-btn" onclick="switchTab('tab-pedidosdel','pedidos-tabs',this)">Pedidos del día</button>
         <button class="tab-btn" onclick="switchTab('tab-historial','pedidos-tabs',this)">Historial</button>
       </div>
@@ -667,6 +668,18 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
         </div>
       </div>
 
+
+      <!-- Tab: Surtir pedido -->
+      <div class="tab-pane" id="tab-surtir" data-group="pedidos-tabs">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Pedidos pendientes de surtir</div>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div id="surtir-pedidos-table"></div>
+          </div>
+        </div>
+      </div>
 
       <!-- Tab: Pedidos del día -->
       <div class="tab-pane" id="tab-pedidosdel" data-group="pedidos-tabs">
@@ -1118,6 +1131,38 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
   </div>
 </div>
 
+<!-- MODAL: Surtir pedido -->
+<div class="modal-overlay" id="modal-surtir">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Surtir pedido — <span id="surtir-tienda-nombre"></span></div>
+      <button class="modal-close" onclick="closeModal('modal-surtir')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th style="text-align:right">Solicitado</th>
+              <th style="text-align:center">Surtido</th>
+            </tr>
+          </thead>
+          <tbody id="surtir-detalle-body"></tbody>
+        </table>
+      </div>
+      <div class="form-group" style="margin-top:12px;width:100%">
+        <label class="form-label">Notas de surtido (opcional)</label>
+        <textarea class="form-input" id="surtir-notas" rows="2" style="width:100%;resize:vertical"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="topbar-btn" onclick="closeModal('modal-surtir')">Cancelar</button>
+      <button class="topbar-btn primary" id="btn-confirmar-surtido" onclick="confirmarSurtido()">Marcar como surtido</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // DATA
@@ -1173,12 +1218,12 @@ function applyRoleUI() {
 
   renderPedidosDelDia();
 
-  // Rol Bodega: no crea pedidos, entra directo a "Pedidos del día"
+  // Rol Bodega: no crea pedidos, entra directo a "Surtir pedido"
   const tabNuevo = document.getElementById('tab-btn-nuevo');
   if (tabNuevo) tabNuevo.style.display = (currentUser.rol === 'bodega') ? 'none' : '';
   if (currentUser.rol === 'bodega') {
-    const btnPedidosDia = document.querySelectorAll('#pedidos-tabs-nav .tab-btn')[1];
-    if (btnPedidosDia) btnPedidosDia.click();
+    const btnSurtir = document.querySelectorAll('#pedidos-tabs-nav .tab-btn')[1];
+    if (btnSurtir) btnSurtir.click();
   }
 
   // Rol Sucursal: interfaz simplificada — sin sidebar, sin botones de topbar,
@@ -1353,6 +1398,7 @@ function switchTab(tabId, group, btn) {
     btn.classList.add('active');
   }
   if(tabId==='tab-nuevopedido') cargarPedidoHoy();
+  if(tabId==='tab-surtir') renderSurtirPedidos();
   if(tabId==='tab-pedidosdel') { renderPedidosDelDia(); renderResumenSalidas(); }
   if(tabId==='tab-historial') renderHistorial();
 }
@@ -1461,9 +1507,118 @@ function renderResumenSalidas() {
   }).join('');
 }
 
-// Nota: las acciones de Bodega (tomar / marcar surtido) viven en el
-// próximo módulo a construir ("Bodega surte pedido"). Por ahora esta
-// vista es informativa.
+// ============================================================
+// BODEGA SURTE PEDIDO
+// ============================================================
+let pedidoASurtir = null;
+
+function renderSurtirPedidos() {
+  const el = document.getElementById('surtir-pedidos-table');
+  if (!el || !currentUser) return;
+  const pendientes = pedidos.filter(p => p.estatus === 'capturado');
+  if (!pendientes.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-msg">No hay pedidos pendientes de surtir hoy</div></div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tienda</th>${PRODUCTS.map(p=>`<th>${p.icon} ${p.name}</th>`).join('')}<th>Estatus</th><th></th></tr></thead>
+        <tbody>${pendientes.map(p => `
+          <tr>
+            <td class="bold">${p.tiendaNombre}</td>
+            ${PRODUCTS.map(prod => {
+              const d = p.prods[prod.id];
+              return `<td class="mono">${d ? d.cantSolicitada : 0} ${prod.unit}</td>`;
+            }).join('')}
+            <td><span class="badge badge-blue">Capturado</span></td>
+            <td><button class="topbar-btn primary" onclick="abrirSurtido('${p.id}')">Surtir</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function abrirSurtido(pedidoId) {
+  const ped = pedidos.find(p => p.id === pedidoId);
+  if (!ped) return;
+
+  // Trae el detalle fresco de Supabase, incluyendo días de entrega de la sucursal
+  const { data, error } = await sb
+    .from('pedidos')
+    .select('id, sucursal_id, sucursales(nombre, dias_entrega), pedido_detalle(producto_id, cant_solicitada, cant_surtida)')
+    .eq('id', pedidoId)
+    .single();
+
+  if (error || !data) { showToast('⚠️ No se pudo cargar el pedido'); return; }
+
+  pedidoASurtir = { id: data.id, sucursalId: data.sucursal_id, diasEntrega: data.sucursales?.dias_entrega || '' };
+
+  document.getElementById('surtir-tienda-nombre').textContent = data.sucursales?.nombre || ped.tiendaNombre;
+  document.getElementById('surtir-notas').value = '';
+
+  const tbody = document.getElementById('surtir-detalle-body');
+  tbody.innerHTML = (data.pedido_detalle || [])
+    .filter(d => d.cant_solicitada > 0)
+    .map(d => {
+      const prod = PRODUCTS.find(x => x.id === d.producto_id);
+      if (!prod) return '';
+      const valorInicial = d.cant_surtida ?? d.cant_solicitada;
+      return `<tr>
+        <td>${prod.icon} ${prod.name}</td>
+        <td class="mono" style="text-align:right">${d.cant_solicitada} ${prod.unit}</td>
+        <td style="text-align:center">
+          <input type="number" class="form-input surtir-input" data-prod="${d.producto_id}"
+                 value="${valorInicial}" min="0" step="1"
+                 style="width:70px;text-align:center;font-family:var(--mono)">
+        </td>
+      </tr>`;
+    }).join('');
+
+  showModal('modal-surtir');
+}
+
+async function confirmarSurtido() {
+  if (!pedidoASurtir) return;
+  const btn = document.getElementById('btn-confirmar-surtido');
+  btn.textContent = 'Guardando...'; btn.disabled = true;
+
+  const inputs = document.querySelectorAll('#surtir-detalle-body .surtir-input');
+  const actualizaciones = Array.from(inputs).map(i => ({
+    producto_id: i.dataset.prod,
+    cant_surtida: Math.round(+i.value) || 0
+  }));
+
+  for (const act of actualizaciones) {
+    await sb.from('pedido_detalle')
+      .update({ cant_surtida: act.cant_surtida })
+      .eq('pedido_id', pedidoASurtir.id)
+      .eq('producto_id', act.producto_id);
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  const diaEntrega = calcularDiaEntrega(pedidoASurtir.diasEntrega, today);
+
+  const { error } = await sb.from('pedidos')
+    .update({
+      estatus: 'surtido',
+      dia_entrega: diaEntrega,
+      surtido_por: currentUser.id,
+      surtido_en: new Date().toISOString(),
+      notas_surtido: document.getElementById('surtir-notas').value || null
+    })
+    .eq('id', pedidoASurtir.id);
+
+  btn.textContent = 'Marcar como surtido'; btn.disabled = false;
+
+  if (error) { showToast('⚠️ Error al marcar surtido: ' + error.message); return; }
+
+  showToast('✅ Pedido marcado como surtido — Día de entrega: ' + (diaEntrega || 'no calculado'));
+  closeModal('modal-surtir');
+  pedidoASurtir = null;
+  await cargarPedidosDelDia();
+  renderSurtirPedidos();
+}
 
 function exportResumen() { alert('En producción: genera un PDF/Excel con el resumen del día para enviar al staff corporativo.'); }
 
@@ -1998,6 +2153,7 @@ async function cargarPedidosDelDia() {
   updatePedidoBadge();
   renderDashboardPedidos();
   renderPedidosDelDia();
+  renderSurtirPedidos();
 }
 
 // ── SESIÓN / LOGIN vía Supabase Auth + tabla `perfiles` ──
