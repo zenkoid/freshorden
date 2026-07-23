@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.5</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.4.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -1163,8 +1163,9 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
         </table>
       </div>
       <div class="form-group" style="margin-top:12px;width:100%">
-        <label class="form-label">Notas de surtido (opcional)</label>
-        <textarea class="form-input" id="surtir-notas" rows="2" style="width:100%;resize:vertical"></textarea>
+        <label class="form-label">Notas de surtido <span id="surtir-notas-req" style="text-transform:none;font-weight:400"></span></label>
+        <textarea class="form-input" id="surtir-notas" rows="2" style="width:100%;resize:vertical" oninput="checkSurtirNotas()"></textarea>
+        <div id="surtir-notas-hint" style="font-size:11px;color:var(--gray-500);margin-top:4px"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1455,7 +1456,8 @@ function updatePedidoBadge() {
 
 const ESTADOS_PEDIDO = {
   capturado:    { label:'Capturado',    cls:'badge-blue'  },
-  surtido:      { label:'Surtido',      cls:'badge-green' },
+  surtido:      { label:'Surtido',      cls:'badge-amber' }, // pendiente de confirmación de la sucursal
+  confirmado:   { label:'Confirmado',   cls:'badge-green' }, // sucursal aceptó lo surtido — listo para pre-factura
   prefacturado: { label:'Pre-facturado',cls:'badge-amber' },
   facturado:    { label:'Facturado',    cls:'badge-green' },
   cancelado:    { label:'Cancelado',    cls:'badge-gray'  },
@@ -1596,18 +1598,64 @@ async function abrirSurtido(pedidoId) {
         <td>${prod.icon} ${prod.name}</td>
         <td class="mono" style="text-align:right">${d.cant_solicitada} ${prod.unit}</td>
         <td style="text-align:center">
-          <input type="number" class="form-input surtir-input" data-prod="${d.producto_id}"
-                 value="${valorInicial}" min="0" step="1"
+          <input type="number" class="form-input surtir-input" data-prod="${d.producto_id}" data-solicitado="${d.cant_solicitada}"
+                 value="${valorInicial}" min="0" step="1" oninput="checkSurtirNotas()"
                  style="width:70px;text-align:center;font-family:var(--mono)">
         </td>
       </tr>`;
     }).join('');
 
   showModal('modal-surtir');
+  checkSurtirNotas();
+}
+
+// Muestra en vivo si hay diferencias entre solicitado y surtido, y el
+// avance hacia el mínimo de 35 caracteres exigido quando existen diferencias.
+function haySurtidoDiferente() {
+  const inputs = document.querySelectorAll('#surtir-detalle-body .surtir-input');
+  return Array.from(inputs).some(i => (Math.round(+i.value) || 0) !== (+i.dataset.solicitado || 0));
+}
+
+function checkSurtirNotas() {
+  const hint = document.getElementById('surtir-notas-hint');
+  const req = document.getElementById('surtir-notas-req');
+  const notas = document.getElementById('surtir-notas').value.trim();
+  if (!hint || !req) return;
+
+  if (haySurtidoDiferente()) {
+    req.textContent = '— obligatorio, mínimo 35 caracteres (hay diferencias vs. lo solicitado)';
+    req.style.color = 'var(--amber)';
+    const faltan = 35 - notas.length;
+    hint.textContent = faltan > 0 ? `Faltan ${faltan} caracteres para justificar el surtido diferente` : `✓ Justificación suficiente (${notas.length} caracteres)`;
+    hint.style.color = faltan > 0 ? 'var(--amber)' : 'var(--green)';
+  } else {
+    req.textContent = '(opcional)';
+    req.style.color = 'var(--gray-500)';
+    hint.textContent = '';
+  }
 }
 
 async function confirmarSurtido() {
   if (!pedidoASurtir) return;
+
+  const notas = document.getElementById('surtir-notas').value.trim();
+  const hayDiferencias = haySurtidoDiferente();
+
+  if (hayDiferencias) {
+    if (notas.length < 35) {
+      alert('El surtido es diferente a lo solicitado. Debes justificarlo en "Notas de surtido" con al menos 35 caracteres antes de continuar.');
+      document.getElementById('surtir-notas').focus();
+      checkSurtirNotas();
+      return;
+    }
+    const confirmarDiferencia = confirm(
+      'Estás marcando un "Surtido Diferente a Solicitud" (al menos un producto no coincide con lo pedido).\n\n' +
+      'Justificación registrada:\n"' + notas + '"\n\n' +
+      '¿Confirmas que deseas continuar?'
+    );
+    if (!confirmarDiferencia) return;
+  }
+
   const btn = document.getElementById('btn-confirmar-surtido');
   btn.textContent = 'Guardando...'; btn.disabled = true;
 
@@ -1633,7 +1681,8 @@ async function confirmarSurtido() {
       dia_entrega: diaEntrega,
       surtido_por: currentUser.id,
       surtido_en: new Date().toISOString(),
-      notas_surtido: document.getElementById('surtir-notas').value || null
+      notas_surtido: notas || null,
+      surtido_diferente: hayDiferencias
     })
     .eq('id', pedidoASurtir.id);
 
@@ -1641,7 +1690,9 @@ async function confirmarSurtido() {
 
   if (error) { showToast('⚠️ Error al marcar surtido: ' + error.message); return; }
 
-  showToast('✅ Pedido marcado como surtido — Día de entrega: ' + (diaEntrega || 'no calculado'));
+  showToast(hayDiferencias
+    ? '✅ Surtido diferente registrado — pendiente de confirmación de la sucursal'
+    : '✅ Pedido marcado como surtido — Día de entrega: ' + (diaEntrega || 'no calculado'));
   closeModal('modal-surtir');
   pedidoASurtir = null;
   await cargarPedidosDelDia();
@@ -2063,7 +2114,7 @@ async function cargarPedidoHoy() {
   const today = new Date().toISOString().split('T')[0];
   const { data, error } = await sb
     .from('pedidos')
-    .select('id, estatus, dia_entrega, pedido_detalle(producto_id, cant_solicitada)')
+    .select('id, estatus, dia_entrega, surtido_diferente, notas_surtido, pedido_detalle(producto_id, cant_solicitada, cant_surtida)')
     .eq('sucursal_id', currentUser.tiendaId)
     .eq('fecha', today)
     .maybeSingle();
@@ -2095,11 +2146,65 @@ async function cargarPedidoHoy() {
   });
   updateSubtotales();
 
+  if (data.estatus === 'surtido') {
+    // Bodega ya surtió — la sucursal debe revisar y confirmar recepción antes de cerrar el pedido
+    const filas = (data.pedido_detalle || [])
+      .filter(d => d.cant_solicitada > 0 || d.cant_surtida > 0)
+      .map(d => {
+        const p = PRODUCTS.find(x => x.id === d.producto_id);
+        if (!p) return '';
+        const surtida = d.cant_surtida ?? 0;
+        const dif = surtida !== d.cant_solicitada;
+        return `<tr>
+          <td>${p.icon} ${p.name}</td>
+          <td class="mono" style="text-align:right">${d.cant_solicitada} ${p.unit}</td>
+          <td class="mono" style="text-align:right;${dif ? 'color:var(--amber);font-weight:600' : ''}">${surtida} ${p.unit}</td>
+        </tr>`;
+      }).join('');
+
+    const avisoDiferencia = data.surtido_diferente
+      ? `<div class="alert alert-warn" style="margin-bottom:12px">⚠️ Bodega registró un <b>surtido diferente a lo solicitado</b>. Motivo: "${data.notas_surtido || 'sin nota'}"</div>`
+      : '';
+
+    msgEl.innerHTML = `
+      <div class="alert alert-info" style="margin-bottom:12px">ℹ️ Tu pedido de hoy ya fue surtido por Bodega. Revisa las cantidades y confirma que lo recibiste conforme.</div>
+      ${avisoDiferencia}
+      <div class="table-wrap" style="margin-bottom:12px">
+        <table>
+          <thead><tr><th>Producto</th><th style="text-align:right">Solicitado</th><th style="text-align:right">Surtido</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>
+      <button class="topbar-btn primary" style="width:100%" onclick="confirmarRecepcion('${data.id}')">✅ Confirmar recepción</button>
+    `;
+    btn.disabled = true;
+    document.querySelectorAll('.pedido-input').forEach(i => i.disabled = true);
+    return;
+  }
+
   if (data.estatus !== 'capturado') {
     msgEl.innerHTML = `<div class="alert alert-info" style="margin-bottom:12px">ℹ️ Tu pedido de hoy ya fue ${(ESTADOS_PEDIDO[data.estatus]||{}).label?.toLowerCase() || 'procesado'}. No se puede modificar — el siguiente pedido se captura al día siguiente.</div>`;
     btn.disabled = true;
     document.querySelectorAll('.pedido-input').forEach(i => i.disabled = true);
   }
+}
+
+async function confirmarRecepcion(pedidoId) {
+  if (!confirm('¿Confirmas que recibiste el pedido con las cantidades que surtió Bodega?\n\nEsta acción cierra el pedido para facturación y ya no podrás modificarlo.')) return;
+
+  const { error } = await sb.from('pedidos')
+    .update({
+      estatus: 'confirmado',
+      confirmado_por: currentUser.id,
+      confirmado_en: new Date().toISOString()
+    })
+    .eq('id', pedidoId);
+
+  if (error) { showToast('⚠️ Error al confirmar recepción: ' + error.message); return; }
+
+  showToast('✅ Recepción confirmada — pedido cerrado para facturación');
+  await cargarPedidoHoy();
+  await cargarPedidosDelDia();
 }
 
 // ── PEDIDOS: guardar en Supabase (pedidos + pedido_detalle reales) ──
