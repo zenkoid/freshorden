@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.1</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -1957,7 +1957,12 @@ function renderReporteTiendas() {
 const SUPABASE_URL = 'https://efqljuiezadbtvsxmkne.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FERywjiVDoG25igyQNcWLw_MCdZ6Mpb';
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: false,   // no guardar sesión en el navegador: siempre pide usuario/contraseña
+    autoRefreshToken: false, // no aplica sin sesión persistida
+  }
+});
 
 // ── CATÁLOGOS: sucursales y productos vienen de la BD, no del código ──
 async function loadCatalogos() {
