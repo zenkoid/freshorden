@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.1</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.2</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -1218,11 +1218,18 @@ function applyRoleUI() {
 
   renderPedidosDelDia();
 
+  // El tab "Surtir pedido" es una acción operativa de Bodega — solo
+  // Bodega/Admin/Gerencia deben poder verlo y usarlo. Sucursal/Corporativo
+  // no deben ni ver que existe.
+  const puedeSurtir = ['bodega', 'admin', 'gerencia'].includes(currentUser.rol);
+  const tabSurtir = document.getElementById('tab-btn-surtir');
+  if (tabSurtir) tabSurtir.style.display = puedeSurtir ? '' : 'none';
+
   // Rol Bodega: no crea pedidos, entra directo a "Surtir pedido"
   const tabNuevo = document.getElementById('tab-btn-nuevo');
   if (tabNuevo) tabNuevo.style.display = (currentUser.rol === 'bodega') ? 'none' : '';
   if (currentUser.rol === 'bodega') {
-    const btnSurtir = document.querySelectorAll('#pedidos-tabs-nav .tab-btn')[1];
+    const btnSurtir = document.getElementById('tab-btn-surtir');
     if (btnSurtir) btnSurtir.click();
   }
 
@@ -1515,6 +1522,7 @@ let pedidoASurtir = null;
 function renderSurtirPedidos() {
   const el = document.getElementById('surtir-pedidos-table');
   if (!el || !currentUser) return;
+  if (!['bodega','admin','gerencia'].includes(currentUser.rol)) { el.innerHTML = ''; return; }
   const pendientes = pedidos.filter(p => p.estatus === 'capturado');
   if (!pendientes.length) {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-msg">No hay pedidos pendientes de surtir hoy</div></div>';
@@ -1540,6 +1548,10 @@ function renderSurtirPedidos() {
 }
 
 async function abrirSurtido(pedidoId) {
+  if (!['bodega','admin','gerencia'].includes(currentUser?.rol)) {
+    showToast('⚠️ No tienes permiso para surtir pedidos');
+    return;
+  }
   const ped = pedidos.find(p => p.id === pedidoId);
   if (!ped) return;
 
