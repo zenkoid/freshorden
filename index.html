@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.3</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.3.4</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -1241,6 +1241,7 @@ function applyRoleUI() {
   // Rol Sucursal: interfaz simplificada — sin sidebar, sin botones de topbar,
   // encabezado reducido a la descripción en letras grandes.
   const isSucursal = currentUser.rol === 'sucursal';
+  const isBodega = currentUser.rol === 'bodega';
   const sidebarEl = document.getElementById('app-sidebar');
   const topbarLogoEl = document.getElementById('topbar-logo');
   const btnRecibir = document.getElementById('btn-recibir-producto');
@@ -1250,8 +1251,10 @@ function applyRoleUI() {
 
   if (sidebarEl) sidebarEl.style.display = isSucursal ? 'none' : '';
   if (topbarLogoEl) topbarLogoEl.style.display = isSucursal ? 'none' : '';
-  if (btnRecibir) btnRecibir.style.display = isSucursal ? 'none' : '';
-  if (btnNuevoTop) btnNuevoTop.style.display = isSucursal ? 'none' : '';
+  // "+ Recibir Producto" ya está en el nav lateral ("Recepción Bodega") para Bodega,
+  // y "Nuevo Pedido" no aplica para Bodega (no captura pedidos) — se ocultan ambos.
+  if (btnRecibir) btnRecibir.style.display = (isSucursal || isBodega) ? 'none' : '';
+  if (btnNuevoTop) btnNuevoTop.style.display = (isSucursal || isBodega) ? 'none' : '';
   if (titleEl) titleEl.style.display = isSucursal ? 'none' : '';
   if (subtitleEl) {
     subtitleEl.style.fontSize = isSucursal ? '18px' : '';
