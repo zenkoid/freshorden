@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.2.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.6.3</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -456,7 +456,12 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
     </div>
     <div class="login-field">
       <label class="form-label">Contraseña</label>
-      <input type="password" class="form-input" id="login-pass" style="width:100%" autocomplete="current-password" placeholder="••••••••">
+      <div style="position:relative">
+        <input type="password" class="form-input" id="login-pass" style="width:100%;padding-right:36px" autocomplete="current-password" placeholder="••••••••">
+        <button type="button" id="toggle-login-pass" onclick="toggleLoginPass()"
+                style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:var(--gray-500);padding:4px"
+                aria-label="Mostrar contraseña" title="Mostrar contraseña">👁️</button>
+      </div>
     </div>
     <button class="topbar-btn primary login-btn" onclick="doLogin()">Ingresar</button>
     <div class="login-error" id="login-error"></div>
@@ -471,7 +476,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       <div class="logo-icon" style="background:none;padding:0;overflow:hidden"><img src="../assets/LogoFO.png" style="width:40px;height:40px;border-radius:9px;object-fit:cover;object-position:center" alt="Fresh Orden"></div>
       <div>
         <div class="logo-text">Fresh Orden</div>
-        <div class="logo-sub">Bodega Central</div>
+        <div class="logo-sub" id="logo-sub-text">Bodega Central</div>
       </div>
     </div>
   </div>
@@ -481,7 +486,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       <span class="nav-icon">📊</span> Dashboard
     </button>
     <button class="nav-item" onclick="showSection('pedidos')">
-      <span class="nav-icon">📋</span> Pedidos del Día
+      <span class="nav-icon">📋</span> <span id="nav-pedidos-label">Pedidos del Día</span>
       <span class="nav-badge" id="badge-pedidos">3</span>
     </button>
     <button class="nav-item" onclick="showSection('recepcion')">
@@ -528,26 +533,25 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 
     <!-- ===== DASHBOARD ===== -->
     <div class="section active" id="section-dashboard">
-      <div class="grid-4" style="margin-bottom:20px">
+      <div class="grid-2" style="margin-bottom:20px">
         <div class="stat-card">
           <div class="stat-label">Pedidos hoy</div>
           <div class="stat-value" id="stat-pedidos">0</div>
           <div class="stat-meta">Tiendas activas</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Kilos despachados</div>
-          <div class="stat-value" style="color:var(--green)">—</div>
-          <div class="stat-meta">Jitomate + Lechuga</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Cajas despachadas</div>
-          <div class="stat-value" style="color:var(--blue)">—</div>
-          <div class="stat-meta">Cebolla Bl. + Mo.</div>
-        </div>
-        <div class="stat-card">
           <div class="stat-label">Facturas pendientes</div>
           <div class="stat-value" style="color:var(--amber)">$98,558</div>
           <div class="stat-meta stat-down">Proveedores</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div class="card-title">Surtido vs. Pendiente de surtir — Hoy</div>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div id="dash-surtido-pendiente-table"></div>
         </div>
       </div>
 
@@ -601,8 +605,9 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
     <div class="section" id="section-pedidos">
       <div class="tabs" id="pedidos-tabs-nav">
         <button class="tab-btn active" id="tab-btn-nuevo" onclick="switchTab('tab-nuevopedido','pedidos-tabs',this)">Nuevo pedido</button>
-        <button class="tab-btn" onclick="switchTab('tab-pedidosdel','pedidos-tabs',this)">Pedidos del día</button>
-        <button class="tab-btn" onclick="switchTab('tab-historial','pedidos-tabs',this)">Historial</button>
+        <button class="tab-btn" id="tab-btn-surtir" onclick="switchTab('tab-surtir','pedidos-tabs',this)">Surtir pedido</button>
+        <button class="tab-btn" id="tab-btn-pedidosdel" onclick="switchTab('tab-pedidosdel','pedidos-tabs',this)">Pedidos del día</button>
+        <button class="tab-btn" id="tab-btn-historial" onclick="switchTab('tab-historial','pedidos-tabs',this)">Historial</button>
       </div>
 
       <!-- Tab: Nuevo pedido -->
@@ -668,6 +673,18 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       </div>
 
 
+      <!-- Tab: Surtir pedido -->
+      <div class="tab-pane" id="tab-surtir" data-group="pedidos-tabs">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Pedidos pendientes de surtir</div>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div id="surtir-pedidos-table"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Tab: Pedidos del día -->
       <div class="tab-pane" id="tab-pedidosdel" data-group="pedidos-tabs">
         <div class="card">
@@ -696,14 +713,44 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       <div class="tab-pane" id="tab-historial" data-group="pedidos-tabs">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Historial — últimos 5 pedidos</div>
+            <div class="card-title">Historial de pedidos</div>
           </div>
           <div class="card-body">
             <div class="form-row">
+              <div class="form-group" id="hist-fecha-group">
+                <label class="form-label">Fecha</label>
+                <input type="date" class="form-input" id="hist-fecha" onchange="renderHistorial()">
+              </div>
+              <div class="form-group" id="hist-mes-group" style="display:none">
+                <label class="form-label">Mes</label>
+                <select class="form-select" id="hist-mes" onchange="renderHistorial()">
+                  <option value="actual">Mes actual</option>
+                  <option value="anterior">Mes anterior</option>
+                  <option value="dos_atras">2 meses atrás</option>
+                </select>
+              </div>
+              <div class="form-group" id="hist-tienda-group">
+                <label class="form-label">Tienda</label>
+                <select class="form-select" id="hist-tienda" onchange="renderHistorial()">
+                  <option value="">Todas</option>
+                </select>
+              </div>
               <div class="form-group">
                 <label class="form-label">Producto</label>
                 <select class="form-select" id="hist-prod" onchange="renderHistorial()">
                   <option value="">Todos</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Status</label>
+                <select class="form-select" id="hist-estatus" onchange="renderHistorial()">
+                  <option value="">Todos</option>
+                  <option value="capturado">Capturado</option>
+                  <option value="surtido">Surtido</option>
+                  <option value="confirmado">Confirmado</option>
+                  <option value="prefacturado">Pre-facturado</option>
+                  <option value="facturado">Facturado</option>
+                  <option value="cancelado">Cancelado</option>
                 </select>
               </div>
             </div>
@@ -875,25 +922,15 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
         <div class="form-group">
           <label class="form-label">Tienda</label>
           <select class="form-select" id="pf-tienda" onchange="renderPreFactura()">
-            <option value="">Seleccionar tienda...</option>
+            <option value="">Todas</option>
           </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Pedido</label>
-          <select class="form-select" id="pf-pedido" onchange="renderPreFactura()">
-            <option value="">Seleccionar pedido...</option>
-          </select>
-        </div>
-        <div style="display:flex;align-items:flex-end;gap:8px">
-          <button class="topbar-btn" onclick="renderPreFactura()">Generar</button>
-          <button class="topbar-btn primary" onclick="approvePreFactura()">Aprobar → Factura</button>
         </div>
       </div>
 
       <div id="prefactura-content">
         <div class="empty-state">
           <div class="empty-icon">🧾</div>
-          <div class="empty-msg">Selecciona una tienda y pedido para generar la pre-factura</div>
+          <div class="empty-msg">Cargando pedidos confirmados...</div>
         </div>
       </div>
     </div>
@@ -1112,8 +1149,40 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       <div class="receipt" id="receipt-content"></div>
     </div>
     <div class="modal-footer">
-      <button class="topbar-btn" onclick="closeModal('modal-pedido-ok')">Cerrar</button>
-      <button class="topbar-btn primary" onclick="closeModal('modal-pedido-ok');showSection('prefactura')">Generar Pre-Factura</button>
+      <button class="topbar-btn primary" onclick="closeModal('modal-pedido-ok')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Surtir pedido -->
+<div class="modal-overlay" id="modal-surtir">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Surtir pedido — <span id="surtir-tienda-nombre"></span></div>
+      <button class="modal-close" onclick="closeModal('modal-surtir')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th style="text-align:right">Solicitado</th>
+              <th style="text-align:center">Surtido</th>
+            </tr>
+          </thead>
+          <tbody id="surtir-detalle-body"></tbody>
+        </table>
+      </div>
+      <div class="form-group" style="margin-top:12px;width:100%">
+        <label class="form-label">Notas de surtido <span id="surtir-notas-req" style="text-transform:none;font-weight:400"></span></label>
+        <textarea class="form-input" id="surtir-notas" rows="2" style="width:100%;resize:vertical" oninput="checkSurtirNotas()"></textarea>
+        <div id="surtir-notas-hint" style="font-size:11px;color:var(--gray-500);margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="topbar-btn" onclick="closeModal('modal-surtir')">Cancelar</button>
+      <button class="topbar-btn primary" id="btn-confirmar-surtido" onclick="confirmarSurtido()">Marcar como surtido</button>
     </div>
   </div>
 </div>
@@ -1173,13 +1242,40 @@ function applyRoleUI() {
 
   renderPedidosDelDia();
 
-  // Rol Bodega: no crea pedidos, entra directo a "Pedidos del día"
+  const isBodega = currentUser.rol === 'bodega';
+  const isAdminGerencia = ['admin', 'gerencia'].includes(currentUser.rol);
+
+  // El tab "Surtir pedido" es una acción operativa exclusiva de Bodega —
+  // Admin/Gerencia ya no la ejecutan (solo revisan vía Historial), y
+  // Sucursal/Corporativo nunca deben ni ver que existe.
+  const tabSurtir = document.getElementById('tab-btn-surtir');
+  if (tabSurtir) tabSurtir.style.display = isBodega ? '' : 'none';
+
+  // Nuevo pedido: no aplica para Bodega ni para Admin/Gerencia (no capturan pedidos)
   const tabNuevo = document.getElementById('tab-btn-nuevo');
-  if (tabNuevo) tabNuevo.style.display = (currentUser.rol === 'bodega') ? 'none' : '';
-  if (currentUser.rol === 'bodega') {
-    const btnPedidosDia = document.querySelectorAll('#pedidos-tabs-nav .tab-btn')[1];
-    if (btnPedidosDia) btnPedidosDia.click();
+  if (tabNuevo) tabNuevo.style.display = (isBodega || isAdminGerencia) ? 'none' : '';
+
+  // Pedidos del día (vista operativa en vivo): tampoco aplica para Admin/Gerencia,
+  // ellos solo consultan vía Historial (rebautizado "Histórico de Pedidos")
+  const tabPedidosDel = document.getElementById('tab-btn-pedidosdel');
+  if (tabPedidosDel) tabPedidosDel.style.display = isAdminGerencia ? 'none' : '';
+
+  if (isBodega) {
+    const btnSurtir = document.getElementById('tab-btn-surtir');
+    if (btnSurtir) btnSurtir.click();
   }
+  if (isAdminGerencia) {
+    const btnHistorial = document.getElementById('tab-btn-historial');
+    if (btnHistorial) btnHistorial.click();
+  }
+
+  // Rebautizar "Pedidos del Día" → "Histórico de Pedidos" en el nav lateral para Admin/Gerencia
+  const navPedidosLabel = document.getElementById('nav-pedidos-label');
+  if (navPedidosLabel) navPedidosLabel.textContent = isAdminGerencia ? 'Histórico de Pedidos' : 'Pedidos del Día';
+
+  // Encabezado del logo lateral: Bodega ve "Bodega Central", Admin/Gerencia ven la operación completa
+  const logoSubEl = document.getElementById('logo-sub-text');
+  if (logoSubEl) logoSubEl.textContent = isAdminGerencia ? 'Operación Fresh Orden' : 'Bodega Central';
 
   // Rol Sucursal: interfaz simplificada — sin sidebar, sin botones de topbar,
   // encabezado reducido a la descripción en letras grandes.
@@ -1193,9 +1289,17 @@ function applyRoleUI() {
 
   if (sidebarEl) sidebarEl.style.display = isSucursal ? 'none' : '';
   if (topbarLogoEl) topbarLogoEl.style.display = isSucursal ? 'none' : '';
-  if (btnRecibir) btnRecibir.style.display = isSucursal ? 'none' : '';
-  if (btnNuevoTop) btnNuevoTop.style.display = isSucursal ? 'none' : '';
+  // "+ Recibir Producto" y "Nuevo Pedido" son tareas operativas: ni Bodega
+  // ni Admin/Gerencia las ejecutan directamente desde ahí.
+  if (btnRecibir) btnRecibir.style.display = (isSucursal || isBodega || isAdminGerencia) ? 'none' : '';
+  if (btnNuevoTop) btnNuevoTop.style.display = (isSucursal || isBodega || isAdminGerencia) ? 'none' : '';
   if (titleEl) titleEl.style.display = isSucursal ? 'none' : '';
+  const histTiendaGroup = document.getElementById('hist-tienda-group');
+  if (histTiendaGroup) histTiendaGroup.style.display = isSucursal ? 'none' : '';
+  const histFechaGroup = document.getElementById('hist-fecha-group');
+  const histMesGroup = document.getElementById('hist-mes-group');
+  if (histFechaGroup) histFechaGroup.style.display = isSucursal ? 'none' : '';
+  if (histMesGroup) histMesGroup.style.display = isSucursal ? '' : 'none';
   if (subtitleEl) {
     subtitleEl.style.fontSize = isSucursal ? '18px' : '';
     subtitleEl.style.color = isSucursal ? 'var(--gray-900)' : '';
@@ -1222,6 +1326,19 @@ const PAGOS_PROV = [
 
 // App state
 let pedidos = [];
+
+// ── Fechas de negocio: SIEMPRE en huso horario de Ciudad de México,
+// sin importar en qué zona horaria esté el dispositivo de quien usa la app.
+// (new Date().toISOString() usa UTC, lo cual rompe el cálculo de "hoy"
+// entre las 6pm y medianoche hora CDMX — este es el fix.)
+const FMT_FECHA_MX = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' });
+function fechaNegocioHoy() {
+  return FMT_FECHA_MX.format(new Date()); // en-CA formatea como YYYY-MM-DD
+}
+function fmtFechaLocal(d) {
+  // Formatea un objeto Date ya construido en local (no reconvierte a UTC)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 let recepciones = [];
 let lastPedido = null;
 
@@ -1230,8 +1347,10 @@ let lastPedido = null;
 // ============================================================
 function init() {
   // Set dates
-  const today = new Date().toISOString().split('T')[0];
+  const today = fechaNegocioHoy();
   document.getElementById('rec-fecha').value = today;
+  const histFechaInput = document.getElementById('hist-fecha');
+  if (histFechaInput) histFechaInput.value = today;
   const f = new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
   document.getElementById('fecha-sidebar').textContent = f.charAt(0).toUpperCase()+f.slice(1);
   document.getElementById('ped-fecha-display').value = f.charAt(0).toUpperCase()+f.slice(1);
@@ -1240,7 +1359,7 @@ function init() {
     : 'Todas / N-A';
 
   // Populate tienda selects (pantallas de admin/gerencia que sí requieren elegir tienda)
-  const tiendaSelects = document.querySelectorAll('#pf-tienda');
+  const tiendaSelects = document.querySelectorAll('#pf-tienda, #hist-tienda');
   tiendaSelects.forEach(sel => {
     TIENDAS.forEach(t => {
       const o = document.createElement('option');
@@ -1335,13 +1454,20 @@ function showSection(id) {
     if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${id}'`)) b.classList.add('active');
   });
   const m = SECTION_META[id];
-  document.getElementById('topbar-title').textContent = m.title;
+  document.getElementById('topbar-title').textContent =
+    (id === 'pedidos' && ['admin','gerencia'].includes(currentUser?.rol)) ? 'Histórico de Pedidos' : m.title;
   document.getElementById('topbar-subtitle').textContent = m.sub;
   if (id==='pedidos') {
-    switchTab('tab-nuevopedido','pedidos-tabs', document.querySelector('.tab-btn'));
+    if (['admin','gerencia'].includes(currentUser?.rol)) {
+      switchTab('tab-historial','pedidos-tabs', document.getElementById('tab-btn-historial'));
+    } else if (currentUser?.rol === 'bodega') {
+      switchTab('tab-surtir','pedidos-tabs', document.getElementById('tab-btn-surtir'));
+    } else {
+      switchTab('tab-nuevopedido','pedidos-tabs', document.getElementById('tab-btn-nuevo'));
+    }
     renderPedidosDelDia();
   }
-  if (id==='prefactura') populatePfPedidos();
+  if (id==='prefactura') renderPreFactura();
 }
 
 function switchTab(tabId, group, btn) {
@@ -1353,6 +1479,7 @@ function switchTab(tabId, group, btn) {
     btn.classList.add('active');
   }
   if(tabId==='tab-nuevopedido') cargarPedidoHoy();
+  if(tabId==='tab-surtir') renderSurtirPedidos();
   if(tabId==='tab-pedidosdel') { renderPedidosDelDia(); renderResumenSalidas(); }
   if(tabId==='tab-historial') renderHistorial();
 }
@@ -1378,7 +1505,7 @@ function clearPedido() {
 }
 
 function updatePedidoBadge() {
-  const t = pedidos.filter(p => p.fecha === new Date().toISOString().split('T')[0]).length;
+  const t = pedidos.filter(p => p.fecha === fechaNegocioHoy()).length;
   const b = document.getElementById('badge-pedidos');
   if (t > 0) { b.textContent = t; b.style.display=''; }
   else b.style.display='none';
@@ -1386,7 +1513,8 @@ function updatePedidoBadge() {
 
 const ESTADOS_PEDIDO = {
   capturado:    { label:'Capturado',    cls:'badge-blue'  },
-  surtido:      { label:'Surtido',      cls:'badge-green' },
+  surtido:      { label:'Surtido',      cls:'badge-amber' }, // pendiente de confirmación de la sucursal
+  confirmado:   { label:'Confirmado',   cls:'badge-green' }, // sucursal aceptó lo surtido — listo para pre-factura
   prefacturado: { label:'Pre-facturado',cls:'badge-amber' },
   facturado:    { label:'Facturado',    cls:'badge-green' },
   cancelado:    { label:'Cancelado',    cls:'badge-gray'  },
@@ -1414,6 +1542,42 @@ function renderDashboardPedidos() {
       </table>
     </div>`;
   document.getElementById('stat-pedidos').textContent = pedidos.length;
+}
+
+// Reemplaza los antiguos "Kilos/Cajas despachadas": acumulado real por producto,
+// separando lo ya Surtido de lo que sigue Pendiente de Surtir — hoy.
+// Cuando se lleve el control de ingreso a Bodega, aquí se puede sumar inventario disponible.
+function renderDashSurtidoPendiente() {
+  const el = document.getElementById('dash-surtido-pendiente-table');
+  if (!el) return;
+
+  const acumulado = {};
+  PRODUCTS.forEach(p => { acumulado[p.id] = { surtido: 0, pendiente: 0 }; });
+
+  pedidos.forEach(p => {
+    Object.entries(p.prods || {}).forEach(([prodId, d]) => {
+      if (!acumulado[prodId]) return;
+      if (p.estatus === 'capturado') {
+        acumulado[prodId].pendiente += (d.cantSolicitada || 0);
+      } else if (['surtido','confirmado','prefacturado','facturado'].includes(p.estatus)) {
+        acumulado[prodId].surtido += (d.cantSurtida || 0);
+      }
+    });
+  });
+
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Producto</th><th style="text-align:right">Surtido</th><th style="text-align:right">Pendiente de surtir</th></tr></thead>
+        <tbody>${PRODUCTS.map(p => `
+          <tr>
+            <td>${p.icon} ${p.name}</td>
+            <td class="mono" style="text-align:right;color:var(--green)">${acumulado[p.id].surtido} ${p.unit}</td>
+            <td class="mono" style="text-align:right;color:var(--amber)">${acumulado[p.id].pendiente} ${p.unit}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 function renderPedidosDelDia() {
@@ -1461,9 +1625,191 @@ function renderResumenSalidas() {
   }).join('');
 }
 
-// Nota: las acciones de Bodega (tomar / marcar surtido) viven en el
-// próximo módulo a construir ("Bodega surte pedido"). Por ahora esta
-// vista es informativa.
+// ============================================================
+// BODEGA SURTE PEDIDO
+// ============================================================
+let pedidoASurtir = null;
+
+async function renderSurtirPedidos() {
+  const el = document.getElementById('surtir-pedidos-table');
+  if (!el || !currentUser) return;
+  if (!['bodega','admin','gerencia'].includes(currentUser.rol)) { el.innerHTML = ''; return; }
+
+  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
+
+  // OJO: esta consulta es independiente de "hoy" a propósito — un pedido
+  // capturado no debe desaparecer de la cola de Bodega solo porque cambió
+  // el día; solo sale de aquí cuando de verdad se marca como surtido.
+  const { data, error } = await sb
+    .from('pedidos')
+    .select('id, fecha, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada)')
+    .eq('estatus', 'capturado')
+    .order('fecha', { ascending: true });
+
+  if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando pedidos pendientes</div></div>'; return; }
+
+  const pendientes = data || [];
+  if (!pendientes.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-msg">No hay pedidos pendientes de surtir</div></div>';
+    return;
+  }
+
+  const hoy = fechaNegocioHoy();
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tienda</th><th>Fecha</th>${PRODUCTS.map(p=>`<th>${p.icon} ${p.name}</th>`).join('')}<th>Estatus</th><th></th></tr></thead>
+        <tbody>${pendientes.map(p => {
+          const atrasado = p.fecha < hoy;
+          const cantidades = {};
+          (p.pedido_detalle || []).forEach(d => { cantidades[d.producto_id] = d.cant_solicitada; });
+          return `
+          <tr>
+            <td class="bold">${p.sucursales?.nombre || '—'}</td>
+            <td class="mono" style="${atrasado ? 'color:var(--red);font-weight:600' : ''}">${p.fecha}${atrasado ? ' ⚠️' : ''}</td>
+            ${PRODUCTS.map(prod => `<td class="mono">${cantidades[prod.id] || 0} ${prod.unit}</td>`).join('')}
+            <td><span class="badge badge-blue">Capturado</span></td>
+            <td><button class="topbar-btn primary" onclick="abrirSurtido('${p.id}')">Surtir</button></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function abrirSurtido(pedidoId) {
+  if (!['bodega','admin','gerencia'].includes(currentUser?.rol)) {
+    showToast('⚠️ No tienes permiso para surtir pedidos');
+    return;
+  }
+  const ped = pedidos.find(p => p.id === pedidoId);
+  if (!ped) return;
+
+  // Trae el detalle fresco de Supabase, incluyendo días de entrega de la sucursal
+  const { data, error } = await sb
+    .from('pedidos')
+    .select('id, sucursal_id, sucursales(nombre, dias_entrega), pedido_detalle(producto_id, cant_solicitada, cant_surtida)')
+    .eq('id', pedidoId)
+    .single();
+
+  if (error || !data) { showToast('⚠️ No se pudo cargar el pedido'); return; }
+
+  pedidoASurtir = { id: data.id, sucursalId: data.sucursal_id, diasEntrega: data.sucursales?.dias_entrega || '' };
+
+  document.getElementById('surtir-tienda-nombre').textContent = data.sucursales?.nombre || ped.tiendaNombre;
+  document.getElementById('surtir-notas').value = '';
+
+  const tbody = document.getElementById('surtir-detalle-body');
+  tbody.innerHTML = (data.pedido_detalle || [])
+    .filter(d => d.cant_solicitada > 0)
+    .map(d => {
+      const prod = PRODUCTS.find(x => x.id === d.producto_id);
+      if (!prod) return '';
+      const valorInicial = d.cant_surtida ?? d.cant_solicitada;
+      return `<tr>
+        <td>${prod.icon} ${prod.name}</td>
+        <td class="mono" style="text-align:right">${d.cant_solicitada} ${prod.unit}</td>
+        <td style="text-align:center">
+          <input type="number" class="form-input surtir-input" data-prod="${d.producto_id}" data-solicitado="${d.cant_solicitada}"
+                 value="${valorInicial}" min="0" step="1" oninput="checkSurtirNotas()"
+                 style="width:70px;text-align:center;font-family:var(--mono)">
+        </td>
+      </tr>`;
+    }).join('');
+
+  showModal('modal-surtir');
+  checkSurtirNotas();
+}
+
+// Muestra en vivo si hay diferencias entre solicitado y surtido, y el
+// avance hacia el mínimo de 35 caracteres exigido quando existen diferencias.
+function haySurtidoDiferente() {
+  const inputs = document.querySelectorAll('#surtir-detalle-body .surtir-input');
+  return Array.from(inputs).some(i => (Math.round(+i.value) || 0) !== (+i.dataset.solicitado || 0));
+}
+
+function checkSurtirNotas() {
+  const hint = document.getElementById('surtir-notas-hint');
+  const req = document.getElementById('surtir-notas-req');
+  const notas = document.getElementById('surtir-notas').value.trim();
+  if (!hint || !req) return;
+
+  if (haySurtidoDiferente()) {
+    req.textContent = '— obligatorio, mínimo 35 caracteres (hay diferencias vs. lo solicitado)';
+    req.style.color = 'var(--amber)';
+    const faltan = 35 - notas.length;
+    hint.textContent = faltan > 0 ? `Faltan ${faltan} caracteres para justificar el surtido diferente` : `✓ Justificación suficiente (${notas.length} caracteres)`;
+    hint.style.color = faltan > 0 ? 'var(--amber)' : 'var(--green)';
+  } else {
+    req.textContent = '(opcional)';
+    req.style.color = 'var(--gray-500)';
+    hint.textContent = '';
+  }
+}
+
+async function confirmarSurtido() {
+  if (!pedidoASurtir) return;
+
+  const notas = document.getElementById('surtir-notas').value.trim();
+  const hayDiferencias = haySurtidoDiferente();
+
+  if (hayDiferencias) {
+    if (notas.length < 35) {
+      alert('El surtido es diferente a lo solicitado. Debes justificarlo en "Notas de surtido" con al menos 35 caracteres antes de continuar.');
+      document.getElementById('surtir-notas').focus();
+      checkSurtirNotas();
+      return;
+    }
+    const confirmarDiferencia = confirm(
+      'Estás marcando un "Surtido Diferente a Solicitud" (al menos un producto no coincide con lo pedido).\n\n' +
+      'Justificación registrada:\n"' + notas + '"\n\n' +
+      '¿Confirmas que deseas continuar?'
+    );
+    if (!confirmarDiferencia) return;
+  }
+
+  const btn = document.getElementById('btn-confirmar-surtido');
+  btn.textContent = 'Guardando...'; btn.disabled = true;
+
+  const inputs = document.querySelectorAll('#surtir-detalle-body .surtir-input');
+  const actualizaciones = Array.from(inputs).map(i => ({
+    producto_id: i.dataset.prod,
+    cant_surtida: Math.round(+i.value) || 0
+  }));
+
+  for (const act of actualizaciones) {
+    await sb.from('pedido_detalle')
+      .update({ cant_surtida: act.cant_surtida })
+      .eq('pedido_id', pedidoASurtir.id)
+      .eq('producto_id', act.producto_id);
+  }
+
+  const today = fechaNegocioHoy();
+  const diaEntrega = calcularDiaEntrega(pedidoASurtir.diasEntrega, today);
+
+  const { error } = await sb.from('pedidos')
+    .update({
+      estatus: 'surtido',
+      dia_entrega: diaEntrega,
+      surtido_por: currentUser.id,
+      surtido_en: new Date().toISOString(),
+      notas_surtido: notas || null,
+      surtido_diferente: hayDiferencias
+    })
+    .eq('id', pedidoASurtir.id);
+
+  btn.textContent = 'Marcar como surtido'; btn.disabled = false;
+
+  if (error) { showToast('⚠️ Error al marcar surtido: ' + error.message); return; }
+
+  showToast(hayDiferencias
+    ? '✅ Surtido diferente registrado — pendiente de confirmación de la sucursal'
+    : '✅ Pedido marcado como surtido — Día de entrega: ' + (diaEntrega || 'no calculado'));
+  closeModal('modal-surtir');
+  pedidoASurtir = null;
+  await cargarPedidosDelDia();
+  renderSurtirPedidos();
+}
 
 function exportResumen() { alert('En producción: genera un PDF/Excel con el resumen del día para enviar al staff corporativo.'); }
 
@@ -1564,103 +1910,108 @@ function rutaRow(r) {
 // ============================================================
 // PRE-FACTURA
 // ============================================================
-function populatePfPedidos() {
-  const sel = document.getElementById('pf-pedido');
-  sel.innerHTML = '<option value="">Seleccionar...</option>';
-  const tiendaId = document.getElementById('pf-tienda').value;
-  const filtered = tiendaId ? pedidos.filter(p => p.tiendaId === tiendaId) : pedidos;
-  filtered.forEach(p => {
-    const o = document.createElement('option');
-    o.value = p.id; o.textContent = `${p.id.split('-')[1]} — ${p.fecha}`;
-    sel.appendChild(o);
-  });
-}
+// PRE-FACTURA — Admin revisa pedidos CONFIRMADOS (por la sucursal) y
+// aprueba su paso a "Pre-facturado", quedando listos para timbrarse ante el SAT.
+// ============================================================
+async function renderPreFactura() {
+  const el = document.getElementById('prefactura-content');
+  if (!el) return;
+  const tiendaFilterEl = document.getElementById('pf-tienda');
+  const tiendaFilter = tiendaFilterEl ? tiendaFilterEl.value : '';
+  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
 
-document.getElementById('pf-tienda').addEventListener('change', populatePfPedidos);
+  let query = sb
+    .from('pedidos')
+    .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
+    .eq('estatus', 'confirmado')
+    .order('fecha', { ascending: true });
 
-function renderPreFactura() {
-  const pedId = document.getElementById('pf-pedido').value;
-  const ped = pedidos.find(p => p.id === pedId);
-  if (!ped) return;
+  if (tiendaFilter) query = query.eq('sucursal_id', tiendaFilter);
 
-  const t = TIENDAS.find(x => x.id === ped.tiendaId);
-  let rows = '', total = 0;
-  PRODUCTS.forEach(p => {
-    const d = ped.prods[p.id];
-    if (!d.cajCli && !d.kgCli) return;
-    const subtotal = d.cajCli*p.pCajaCli + d.kgCli*p.pKgCli;
-    total += subtotal;
-    rows += `
-      <tr>
+  const { data, error } = await query;
+  if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando pedidos confirmados</div></div>'; return; }
+
+  const rows = data || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🧾</div><div class="empty-msg">No hay pedidos confirmados pendientes de pre-facturar</div></div>';
+    return;
+  }
+
+  el.innerHTML = rows.map(ped => {
+    const detalle = (ped.pedido_detalle || []).filter(d => (d.cant_surtida ?? 0) > 0);
+    let total = 0;
+    const filas = detalle.map(d => {
+      const p = PRODUCTS.find(x => x.id === d.producto_id);
+      if (!p) return '';
+      const cant = d.cant_surtida ?? 0;
+      const subtotal = cant * (d.precio_unitario || 0);
+      total += subtotal;
+      return `<tr>
         <td>${p.icon} ${p.name}</td>
-        <td class="mono" style="text-align:right">${d.cajCli}</td>
-        <td class="mono" style="text-align:right">$${p.pCajaCli.toFixed(2)}</td>
-        <td class="mono" style="text-align:right">${d.kgCli}</td>
-        <td class="mono" style="text-align:right">$${p.pKgCli.toFixed(2)}</td>
+        <td class="mono" style="text-align:right">${cant} ${p.unit}</td>
+        <td class="mono" style="text-align:right">$${(d.precio_unitario||0).toFixed(2)}</td>
         <td class="mono bold" style="text-align:right">$${subtotal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
       </tr>`;
-  });
-  const iva = total * 0.16;
+    }).join('');
+    const iva = total * 0.16;
 
-  document.getElementById('prefactura-content').innerHTML = `
-    <div class="card" style="max-width:700px">
+    return `
+    <div class="card" style="margin-bottom:16px;max-width:760px">
       <div class="card-header">
         <div>
-          <div class="card-title">PRE-FACTURA ${ped.id}</div>
-          <div style="font-size:11px;color:var(--gray-500);margin-top:2px">Borrador — pendiente de aprobación</div>
+          <div class="card-title">${ped.sucursales?.nombre || '—'} — ${ped.fecha}</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px">Confirmado por la sucursal — pendiente de pre-facturar</div>
         </div>
-        <div style="margin-left:auto;text-align:right;font-size:12px;color:var(--gray-500)">
-          <div>Fecha: <strong>${ped.fecha}</strong></div>
-          <div>Ruta: <strong>${RUTAS[ped.ruta].name}</strong></div>
+        <div style="margin-left:auto">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gray-500)">
+            <input type="checkbox" onchange="togglePreviaFactura('${ped.id}', this.checked)"> Ver factura previa a timbrarse
+          </label>
         </div>
       </div>
-      <div class="card-body">
-        <div style="display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--gray-100)">
-          <div>
-            <div style="font-size:11px;color:var(--gray-500);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Facturar a</div>
-            <div style="font-size:15px;font-weight:600;margin-top:2px">Dragon Foods — ${ped.tiendaNombre}</div>
-            <div style="font-size:12px;color:var(--gray-500)">Tienda ${t.name}</div>
+      <div id="pf-detalle-${ped.id}" style="display:none">
+        <div class="card-body">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Producto</th><th style="text-align:right">Cantidad</th><th style="text-align:right">P/U</th><th style="text-align:right">Subtotal</th></tr></thead>
+              <tbody>${filas}</tbody>
+            </table>
           </div>
-          <div style="text-align:right">
-            <div style="font-size:11px;color:var(--gray-500);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Emitida por</div>
-            <div style="font-size:15px;font-weight:600;margin-top:2px">Fresh Orden S.A. de C.V.</div>
-            <div style="font-size:12px;color:var(--gray-500)">Proveedor materia prima</div>
+          <div style="margin-top:16px;padding:12px;background:var(--gray-50);border-radius:var(--radius-sm);max-width:280px;margin-left:auto">
+            <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">Subtotal</span><span class="mono">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+            <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">IVA 16%</span><span class="mono">$${iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+            <div class="receipt-total"><span>Total</span><span class="mono" style="color:var(--green)">$${(total+iva).toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
           </div>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th style="text-align:right">Cajas</th>
-                <th style="text-align:right">P/Caja</th>
-                <th style="text-align:right">Kg</th>
-                <th style="text-align:right">P/Kg</th>
-                <th style="text-align:right">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-        <div style="margin-top:16px;padding:12px;background:var(--gray-50);border-radius:var(--radius-sm);max-width:280px;margin-left:auto">
-          <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">Subtotal</span><span class="mono">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
-          <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">IVA 16%</span><span class="mono">$${iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
-          <div class="receipt-total"><span>Total</span><span class="mono" style="color:var(--green)">$${(total+iva).toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
-        </div>
-        <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
-          <span class="badge badge-amber">⏳ Pre-factura — borrador</span>
-        </div>
+      </div>
+      <div class="modal-footer" style="border-top:1px solid var(--gray-100)">
+        <button class="topbar-btn primary" id="pf-btn-aprobar-${ped.id}" disabled onclick="aprobarPreFactura('${ped.id}')">Aprobar → Generar Factura</button>
       </div>
     </div>`;
+  }).join('');
 }
 
-function approvePreFactura() {
-  const pedId = document.getElementById('pf-pedido').value;
-  if (!pedId) { alert('Selecciona un pedido primero'); return; }
-  const ped = pedidos.find(p => p.id === pedId);
-  if (ped) ped.estatus = 'facturado';
+function togglePreviaFactura(pedidoId, visible) {
+  const det = document.getElementById('pf-detalle-' + pedidoId);
+  const btn = document.getElementById('pf-btn-aprobar-' + pedidoId);
+  if (det) det.style.display = visible ? '' : 'none';
+  if (btn) btn.disabled = !visible;
+}
+
+async function aprobarPreFactura(pedidoId) {
+  if (!confirm('¿Confirmas aprobar la generación de la factura para este pedido?\n\nQuedará marcado como "Pre-facturado", listo para timbrarse ante el SAT.')) return;
+
+  const { error } = await sb.from('pedidos')
+    .update({
+      estatus: 'prefacturado',
+      prefacturado_por: currentUser.id,
+      prefacturado_en: new Date().toISOString()
+    })
+    .eq('id', pedidoId);
+
+  if (error) { showToast('⚠️ Error al aprobar: ' + error.message); return; }
+
+  showToast('✅ Pre-factura aprobada — lista para timbrarse ante el SAT');
   renderPreFactura();
-  alert('✅ Pre-factura aprobada. Lista para enviar al cliente.');
 }
 
 // ============================================================
@@ -1707,16 +2058,38 @@ async function renderHistorial() {
   const el = document.getElementById('historial-table');
   if (!currentUser) return;
   const prodFilter = document.getElementById('hist-prod').value;
+  const estatusFilterEl = document.getElementById('hist-estatus');
+  const estatusFilter = estatusFilterEl ? estatusFilterEl.value : '';
+  const tiendaFilterEl = document.getElementById('hist-tienda');
+  const tiendaFilter = tiendaFilterEl ? tiendaFilterEl.value : '';
   el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
 
   let query = sb
     .from('pedidos')
-    .select('id, fecha, estatus, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
-    .order('creado_en', { ascending: false })
-    .limit(5);
+    .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
+    .order('creado_en', { ascending: false });
+
+  if (estatusFilter) query = query.eq('estatus', estatusFilter);
 
   if (currentUser.rol === 'sucursal' && currentUser.tiendaId) {
     query = query.eq('sucursal_id', currentUser.tiendaId);
+
+    // Filtro por mes: Mes actual / Mes anterior / 2 meses atrás, a partir de HOY
+    const mesSel = document.getElementById('hist-mes');
+    const mesVal = mesSel ? mesSel.value : 'actual';
+    const offsetMeses = mesVal === 'anterior' ? 1 : (mesVal === 'dos_atras' ? 2 : 0);
+    const hoy = new Date();
+    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth() - offsetMeses, 1);
+    const finMes = new Date(hoy.getFullYear(), hoy.getMonth() - offsetMeses + 1, 0);
+    const fmt = d => fmtFechaLocal(d);
+    query = query.gte('fecha', fmt(inicioMes)).lte('fecha', fmt(finMes));
+  } else {
+    if (tiendaFilter) query = query.eq('sucursal_id', tiendaFilter);
+
+    // Filtro por fecha exacta (día por día) para Bodega/Admin/Gerencia
+    const fechaEl = document.getElementById('hist-fecha');
+    const fechaVal = fechaEl ? fechaEl.value : '';
+    if (fechaVal) query = query.eq('fecha', fechaVal);
   }
 
   const { data, error } = await query;
@@ -1802,7 +2175,12 @@ function renderReporteTiendas() {
 const SUPABASE_URL = 'https://efqljuiezadbtvsxmkne.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FERywjiVDoG25igyQNcWLw_MCdZ6Mpb';
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: false,   // no guardar sesión en el navegador: siempre pide usuario/contraseña
+    autoRefreshToken: false, // no aplica sin sesión persistida
+  }
+});
 
 // ── CATÁLOGOS: sucursales y productos vienen de la BD, no del código ──
 async function loadCatalogos() {
@@ -1854,7 +2232,7 @@ function calcularDiaEntrega(diasEntregaStr, fechaSurtidoISO) {
     const candidate = new Date(base);
     candidate.setDate(base.getDate() + add);
     if (diasIdx.includes(candidate.getDay())) {
-      return candidate.toISOString().split('T')[0];
+      return fmtFechaLocal(candidate);
     }
   }
   return null;
@@ -1868,10 +2246,10 @@ let pedidoHoyId = null;
 async function cargarPedidoHoy() {
   if (!currentUser || currentUser.rol !== 'sucursal' || !currentUser.tiendaId) return;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = fechaNegocioHoy();
   const { data, error } = await sb
     .from('pedidos')
-    .select('id, estatus, dia_entrega, pedido_detalle(producto_id, cant_solicitada)')
+    .select('id, estatus, dia_entrega, surtido_diferente, notas_surtido, pedido_detalle(producto_id, cant_solicitada, cant_surtida)')
     .eq('sucursal_id', currentUser.tiendaId)
     .eq('fecha', today)
     .maybeSingle();
@@ -1903,6 +2281,42 @@ async function cargarPedidoHoy() {
   });
   updateSubtotales();
 
+  if (data.estatus === 'surtido') {
+    // Bodega ya surtió — la sucursal debe revisar y confirmar recepción antes de cerrar el pedido
+    const filas = (data.pedido_detalle || [])
+      .filter(d => d.cant_solicitada > 0 || d.cant_surtida > 0)
+      .map(d => {
+        const p = PRODUCTS.find(x => x.id === d.producto_id);
+        if (!p) return '';
+        const surtida = d.cant_surtida ?? 0;
+        const dif = surtida !== d.cant_solicitada;
+        return `<tr>
+          <td>${p.icon} ${p.name}</td>
+          <td class="mono" style="text-align:right">${d.cant_solicitada} ${p.unit}</td>
+          <td class="mono" style="text-align:right;${dif ? 'color:var(--amber);font-weight:600' : ''}">${surtida} ${p.unit}</td>
+        </tr>`;
+      }).join('');
+
+    const avisoDiferencia = data.surtido_diferente
+      ? `<div class="alert alert-warn" style="margin-bottom:12px">⚠️ Bodega registró un <b>surtido diferente a lo solicitado</b>. Motivo: "${data.notas_surtido || 'sin nota'}"</div>`
+      : '';
+
+    msgEl.innerHTML = `
+      <div class="alert alert-info" style="margin-bottom:12px">ℹ️ Tu pedido de hoy ya fue surtido por Bodega. Revisa las cantidades y confirma que lo recibiste conforme.</div>
+      ${avisoDiferencia}
+      <div class="table-wrap" style="margin-bottom:12px">
+        <table>
+          <thead><tr><th>Producto</th><th style="text-align:right">Solicitado</th><th style="text-align:right">Surtido</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>
+      <button class="topbar-btn primary" style="width:100%" onclick="confirmarRecepcion('${data.id}')">✅ Confirmar recepción</button>
+    `;
+    btn.disabled = true;
+    document.querySelectorAll('.pedido-input').forEach(i => i.disabled = true);
+    return;
+  }
+
   if (data.estatus !== 'capturado') {
     msgEl.innerHTML = `<div class="alert alert-info" style="margin-bottom:12px">ℹ️ Tu pedido de hoy ya fue ${(ESTADOS_PEDIDO[data.estatus]||{}).label?.toLowerCase() || 'procesado'}. No se puede modificar — el siguiente pedido se captura al día siguiente.</div>`;
     btn.disabled = true;
@@ -1910,11 +2324,29 @@ async function cargarPedidoHoy() {
   }
 }
 
+async function confirmarRecepcion(pedidoId) {
+  if (!confirm('¿Confirmas que recibiste el pedido con las cantidades que surtió Bodega?\n\nEsta acción cierra el pedido para facturación y ya no podrás modificarlo.')) return;
+
+  const { error } = await sb.from('pedidos')
+    .update({
+      estatus: 'confirmado',
+      confirmado_por: currentUser.id,
+      confirmado_en: new Date().toISOString()
+    })
+    .eq('id', pedidoId);
+
+  if (error) { showToast('⚠️ Error al confirmar recepción: ' + error.message); return; }
+
+  showToast('✅ Recepción confirmada — pedido cerrado para facturación');
+  await cargarPedidoHoy();
+  await cargarPedidosDelDia();
+}
+
 // ── PEDIDOS: guardar en Supabase (pedidos + pedido_detalle reales) ──
 async function savePedido() {
   if (!currentUser?.tiendaId) { showToast('⚠️ Tu usuario no tiene sucursal asignada'); return; }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = fechaNegocioHoy();
   const lineas = PRODUCTS.map(p => ({
     producto_id: p.id,
     cant_solicitada: Math.round(+getInput(p.id) || 0),
@@ -1922,7 +2354,38 @@ async function savePedido() {
     precio_unitario: p.pCli,
   })).filter(l => l.cant_solicitada > 0);
 
-  if (!lineas.length) { alert('Ingresa al menos una cantidad'); return; }
+  if (!lineas.length) {
+    if (!pedidoHoyId) {
+      // No existe pedido aún hoy: no tiene sentido crear uno vacío
+      alert('Ingresa al menos una cantidad');
+      return;
+    }
+    // Ya existe un pedido capturado hoy: dejarlo todo en ceros = CANCELAR el pedido
+    // (solo posible mientras Bodega no lo haya surtido; los campos ya están
+    // deshabilitados por cargarPedidoHoy() en cualquier otro estatus).
+    const confirmaCancelar = confirm(
+      'Vas a guardar el pedido con todas las cantidades en cero.\n\n' +
+      'Esto CANCELA tu pedido de hoy — quedará como "Sin pedido hoy".\n\n' +
+      '¿Confirmas que deseas cancelarlo?'
+    );
+    if (!confirmaCancelar) return;
+
+    const btnCancelar = document.getElementById('btn-guardar-pedido');
+    btnCancelar.textContent = 'Cancelando...'; btnCancelar.disabled = true;
+
+    await sb.from('pedido_detalle').delete().eq('pedido_id', pedidoHoyId);
+    const { error: errCancelar } = await sb.from('pedidos').delete().eq('id', pedidoHoyId);
+
+    btnCancelar.textContent = 'Guardar pedido'; btnCancelar.disabled = false;
+
+    if (errCancelar) { showToast('⚠️ Error al cancelar pedido: ' + errCancelar.message); return; }
+
+    pedidoHoyId = null;
+    showToast('🗑️ Pedido cancelado — Sin pedido hoy');
+    await cargarPedidoHoy();
+    await cargarPedidosDelDia();
+    return;
+  }
 
   const btn = document.getElementById('btn-guardar-pedido');
   btn.textContent = 'Guardando...'; btn.disabled = true;
@@ -1974,7 +2437,7 @@ async function savePedido() {
 
 // ── Cargar pedidos del día (RLS filtra automático según el rol) ──
 async function cargarPedidosDelDia() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = fechaNegocioHoy();
   const { data, error } = await sb
     .from('pedidos')
     .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
@@ -1997,7 +2460,9 @@ async function cargarPedidosDelDia() {
 
   updatePedidoBadge();
   renderDashboardPedidos();
+  renderDashSurtidoPendiente();
   renderPedidosDelDia();
+  renderSurtirPedidos();
 }
 
 // ── SESIÓN / LOGIN vía Supabase Auth + tabla `perfiles` ──
@@ -2050,6 +2515,15 @@ async function checkSession() {
   document.getElementById('login-overlay').style.display = 'flex';
   document.getElementById('app-root').style.display = 'none';
   return false;
+}
+
+function toggleLoginPass() {
+  const input = document.getElementById('login-pass');
+  const btn = document.getElementById('toggle-login-pass');
+  const mostrando = input.type === 'text';
+  input.type = mostrando ? 'password' : 'text';
+  btn.textContent = mostrando ? '👁️' : '🙈';
+  btn.title = mostrando ? 'Mostrar contraseña' : 'Ocultar contraseña';
 }
 
 async function doLogin() {
