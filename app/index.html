@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.6.4</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.7.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -503,6 +503,10 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       <span class="nav-icon">💰</span> Conciliación
     </button>
     <div class="nav-section-label">Análisis</div>
+    <button class="nav-item" onclick="showSection('leads')">
+      <span class="nav-icon">📥</span> Leads
+      <span class="nav-badge" id="badge-leads" style="display:none">0</span>
+    </button>
     <button class="nav-item" onclick="showSection('reportes')">
       <span class="nav-icon">📈</span> Reportes
     </button>
@@ -996,6 +1000,63 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
     </div>
 
     <!-- ===== REPORTES ===== -->
+    <!-- ===== LEADS ===== -->
+    <div class="section" id="section-leads">
+      <div class="grid-4" style="margin-bottom:20px">
+        <div class="stat-card">
+          <div class="stat-label">Nuevos</div>
+          <div class="stat-value" id="stat-leads-nuevo" style="color:var(--blue)">0</div>
+          <div class="stat-meta">Sin contactar</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Contactados</div>
+          <div class="stat-value" id="stat-leads-contactado" style="color:var(--amber)">0</div>
+          <div class="stat-meta">En seguimiento</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Calificados</div>
+          <div class="stat-value" id="stat-leads-calificado" style="color:var(--green-mid)">0</div>
+          <div class="stat-meta">Con potencial</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Clientes</div>
+          <div class="stat-value" id="stat-leads-cliente" style="color:var(--green)">0</div>
+          <div class="stat-meta">Convertidos</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Solicitudes recibidas</div>
+          <div class="topbar-spacer"></div>
+          <button class="topbar-btn" onclick="cargarLeads()">↻ Actualizar</button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Nombre</th>
+                  <th>Negocio</th>
+                  <th>Tipo</th>
+                  <th>Suc.</th>
+                  <th>Teléfono</th>
+                  <th>Correo</th>
+                  <th>Mensaje</th>
+                  <th>Estatus</th>
+                </tr>
+              </thead>
+              <tbody id="leads-tbody">
+                <tr><td colspan="9" style="text-align:center;color:var(--gray-500);padding:20px">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== REPORTES ===== -->
     <div class="section" id="section-reportes">
       <div class="grid-2" style="margin-bottom:20px">
         <div class="card">
@@ -1214,8 +1275,8 @@ const SECCIONES_POR_ROL = {
   sucursal:    ['pedidos'],
   corporativo: ['pedidos','reportes'],
   bodega:      ['pedidos','recepcion'],
-  gerencia:    ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','reportes'],
-  admin:       ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','reportes'],
+  gerencia:    ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','leads','reportes'],
+  admin:       ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','leads','reportes'],
 };
 
 function applyRoleUI() {
@@ -1444,6 +1505,7 @@ const SECTION_META = {
   prefactura:   { title:'Pre-Factura', sub:'Generación de pre-facturas por tienda' },
   conciliacion: { title:'Conciliación', sub:'Facturas vs pagos' },
   reportes:     { title:'Reportes', sub:'Análisis de operación' },
+  leads:        { title:'Leads', sub:'Solicitudes de información desde la Landing Page' },
 };
 
 function showSection(id) {
@@ -1468,6 +1530,7 @@ function showSection(id) {
     renderPedidosDelDia();
   }
   if (id==='prefactura') renderPreFactura();
+  if (id==='leads') cargarLeads();
 }
 
 function switchTab(tabId, group, btn) {
@@ -2465,6 +2528,92 @@ async function cargarPedidosDelDia() {
   renderSurtirPedidos();
 }
 
+// ── LEADS: solicitudes de información capturadas en la Landing Page ──
+const ESTATUS_LEADS = [
+  { value: 'nuevo',       label: 'Nuevo',       badge: 'badge-blue'  },
+  { value: 'contactado',  label: 'Contactado',  badge: 'badge-amber' },
+  { value: 'calificado',  label: 'Calificado',  badge: 'badge-green' },
+  { value: 'cliente',     label: 'Cliente',     badge: 'badge-green' },
+  { value: 'descartado',  label: 'Descartado',  badge: 'badge-gray'  },
+];
+
+async function cargarLeads() {
+  const tbody = document.getElementById('leads-tbody');
+  tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--gray-500);padding:20px">Cargando...</td></tr>`;
+
+  const { data, error } = await sb
+    .from('leads')
+    .select('*')
+    .order('creado_en', { ascending: false });
+
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--red);padding:20px">Error cargando leads: ${error.message}</td></tr>`;
+    return;
+  }
+
+  if (!data || !data.length) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--gray-500);padding:20px">Todavía no hay solicitudes registradas.</td></tr>`;
+    updateLeadsStats([]);
+    return;
+  }
+
+  tbody.innerHTML = data.map(l => {
+    const fecha = new Date(l.creado_en).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+    const opciones = ESTATUS_LEADS.map(e =>
+      `<option value="${e.value}" ${l.estatus === e.value ? 'selected' : ''}>${e.label}</option>`
+    ).join('');
+    return `<tr data-lead-id="${l.id}">
+      <td class="mono" style="white-space:nowrap">${fecha}</td>
+      <td class="bold">${l.nombre || '—'}</td>
+      <td>${l.negocio || '—'}</td>
+      <td>${l.tipo_negocio === 'cadena' ? 'Cadena' : 'Independiente'}</td>
+      <td class="mono" style="text-align:center">${l.num_sucursales ?? '—'}</td>
+      <td class="mono">${l.telefono || '—'}</td>
+      <td>${l.email || '—'}</td>
+      <td style="max-width:220px;white-space:normal;color:var(--gray-500)">${l.mensaje || '—'}</td>
+      <td>
+        <select class="form-select" style="min-width:130px" onchange="actualizarEstatusLead('${l.id}', this.value)">
+          ${opciones}
+        </select>
+      </td>
+    </tr>`;
+  }).join('');
+
+  updateLeadsStats(data);
+}
+
+function updateLeadsStats(data) {
+  const counts = { nuevo: 0, contactado: 0, calificado: 0, cliente: 0 };
+  data.forEach(l => { if (counts[l.estatus] !== undefined) counts[l.estatus]++; });
+  document.getElementById('stat-leads-nuevo').textContent = counts.nuevo;
+  document.getElementById('stat-leads-contactado').textContent = counts.contactado;
+  document.getElementById('stat-leads-calificado').textContent = counts.calificado;
+  document.getElementById('stat-leads-cliente').textContent = counts.cliente;
+
+  const badge = document.getElementById('badge-leads');
+  if (badge) {
+    if (counts.nuevo > 0) { badge.textContent = counts.nuevo; badge.style.display = ''; }
+    else { badge.style.display = 'none'; }
+  }
+}
+
+async function actualizarEstatusLead(id, nuevoEstatus) {
+  const { error } = await sb.from('leads').update({ estatus: nuevoEstatus }).eq('id', id);
+  if (error) { showToast('⚠️ No se pudo actualizar el estatus: ' + error.message); return; }
+  showToast('✅ Estatus actualizado');
+  await cargarLeads();
+}
+
+// Badge de leads nuevos visible desde que se carga la sesión (no solo al entrar a la sección)
+async function actualizarBadgeLeadsInicial() {
+  const { data } = await sb.from('leads').select('estatus').eq('estatus', 'nuevo');
+  const badge = document.getElementById('badge-leads');
+  if (badge && data) {
+    if (data.length > 0) { badge.textContent = data.length; badge.style.display = ''; }
+    else { badge.style.display = 'none'; }
+  }
+}
+
 // ── SESIÓN / LOGIN vía Supabase Auth + tabla `perfiles` ──
 async function cargarPerfilYArrancar(authUser) {
   const { data: perfil, error } = await sb
@@ -2504,6 +2653,7 @@ async function cargarPerfilYArrancar(authUser) {
   await cargarPedidosDelDia();
   await cargarPedidoHoy();
   await renderHistorial();
+  if (['admin','gerencia'].includes(currentUser.rol)) await actualizarBadgeLeadsInicial();
 }
 
 async function checkSession() {
