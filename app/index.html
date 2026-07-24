@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fresh Orden — Sistema de Operaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --green: #1a6b3f;
+  --green-mid: #2d9e5e;
+  --green-light: #e8f5ee;
+  --green-border: #a8d5b8;
+  --amber: #c27c14;
+  --amber-light: #fef3e2;
+  --red: #b83c3c;
+  --red-light: #fdeaea;
+  --blue: #2563a8;
+  --blue-light: #eaf0fb;
+  --gray-50: #f8f7f4;
+  --gray-100: #edecea;
+  --gray-200: #d4d2cc;
+  --gray-500: #7c7a74;
+  --gray-700: #3d3c38;
+  --gray-900: #1e1d1a;
+  --white: #ffffff;
+  --shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font: 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: var(--gray-50);
+  color: var(--gray-900);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* LAYOUT */
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+.sidebar {
+  width: 220px; min-width: 220px;
+  background: var(--white);
+  border-right: 1px solid var(--gray-100);
+  display: flex; flex-direction: column;
+  padding: 0;
+  z-index: 10;
+}
+
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--gray-100);
+}
+.logo-mark {
+  display: flex; align-items: center; gap: 8px;
+}
+.logo-icon {
+  width: 32px; height: 32px;
+  background: var(--green);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.logo-text { font-size: 15px; font-weight: 600; color: var(--gray-900); letter-spacing: -0.3px; }
+.logo-sub { font-size: 10px; color: var(--gray-500); font-weight: 400; letter-spacing: 0.5px; text-transform: uppercase; }
+
+.nav { padding: 12px 10px; flex: 1; }
+.nav-section-label {
+  font-size: 10px; font-weight: 500;
+  color: var(--gray-500); letter-spacing: 0.8px; text-transform: uppercase;
+  padding: 8px 10px 4px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px; font-weight: 400; color: var(--gray-700);
+  transition: all 0.12s;
+  border: none; background: none; width: 100%; text-align: left;
+}
+.nav-item:hover { background: var(--gray-50); color: var(--gray-900); }
+.nav-item.active { background: var(--green-light); color: var(--green); font-weight: 500; }
+.nav-icon { font-size: 15px; opacity: 0.7; }
+.nav-item.active .nav-icon { opacity: 1; }
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--red); color: white;
+  font-size: 10px; font-weight: 600;
+  padding: 1px 6px; border-radius: 10px;
+}
+
+.sidebar-footer {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--gray-100);
+  font-size: 11px; color: var(--gray-500);
+}
+
+.main {
+  flex: 1; display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+.topbar {
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-100);
+  padding: 0 24px;
+  height: 56px;
+  display: flex; align-items: center; gap: 16px;
+}
+.topbar-title { font-size: 16px; font-weight: 500; color: var(--gray-900); }
+.topbar-subtitle { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
+.topbar-spacer { flex: 1; }
+.topbar-btn {
+  padding: 7px 14px; border-radius: var(--radius-sm);
+  border: 1px solid var(--gray-200);
+  background: var(--white);
+  font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--gray-700);
+  cursor: pointer; transition: all 0.12s;
+}
+.topbar-btn:hover { background: var(--gray-50); border-color: var(--gray-500); }
+.topbar-btn.primary {
+  background: var(--green); color: var(--white); border-color: var(--green);
+}
+.topbar-btn.primary:hover { background: #145530; }
+
+.content { flex: 1; overflow-y: auto; padding: 24px; }
+
+/* SECTIONS */
+.section { display: none; }
+.section.active { display: block; }
+
+/* CARDS */
+.card {
+  background: var(--white);
+  border: 1px solid var(--gray-100);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.card-header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--gray-100);
+  display: flex; align-items: center; gap: 10px;
+}
+.card-title { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.card-body { padding: 20px; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+/* STAT CARDS */
+.stat-card {
+  background: var(--white);
+  border: 1px solid var(--gray-100);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  box-shadow: var(--shadow);
+}
+.stat-label { font-size: 11px; font-weight: 500; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-value { font-size: 28px; font-weight: 600; color: var(--gray-900); margin-top: 4px; letter-spacing: -0.5px; }
+.stat-meta { font-size: 12px; color: var(--gray-500); margin-top: 4px; }
+.stat-up { color: var(--green-mid); font-weight: 500; }
+.stat-down { color: var(--red); font-weight: 500; }
+
+/* TABLES */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 11px; font-weight: 500; color: var(--gray-500);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--gray-100);
+  white-space: nowrap;
+}
+tbody tr { border-bottom: 0.5px solid var(--gray-100); transition: background 0.1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--gray-50); }
+td { padding: 10px 12px; color: var(--gray-700); vertical-align: middle; }
+td.mono { font-family: var(--mono); font-size: 12px; }
+td.bold { font-weight: 600; color: var(--gray-900); }
+
+/* BADGES */
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 500;
+}
+.badge-green { background: var(--green-light); color: var(--green); }
+.badge-amber { background: var(--amber-light); color: var(--amber); }
+.badge-red { background: var(--red-light); color: var(--red); }
+.badge-blue { background: var(--blue-light); color: var(--blue); }
+.badge-gray { background: var(--gray-100); color: var(--gray-500); }
+
+/* FORMS */
+.form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-label { font-size: 11px; font-weight: 500; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; }
+.form-input, .form-select {
+  padding: 7px 10px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-family: var(--font); font-size: 13px; color: var(--gray-900);
+  background: var(--white);
+  outline: none; transition: border-color 0.15s;
+  min-width: 120px;
+}
+.form-input:focus, .form-select:focus { border-color: var(--green-mid); }
+.form-input[type="number"] { font-family: var(--mono); }
+
+/* PRODUCT ICONS */
+.prod-icon {
+  width: 32px; height: 32px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.prod-jitomate { background: #fde8e8; }
+.prod-lechuga { background: #e8f5e9; }
+.prod-cebolla-blanca { background: #f5f5e8; }
+.prod-cebolla-morada { background: #ede8f5; }
+.prod-guantes { background: #e8eef5; }
+
+/* PEDIDO FORM */
+.pedido-table td { padding: 6px 8px; }
+.pedido-input {
+  width: 70px; padding: 4px 6px;
+  border: 1px solid var(--gray-200); border-radius: 4px;
+  font-family: var(--mono); font-size: 13px; text-align: right;
+  background: var(--gray-50); outline: none;
+}
+.pedido-input:focus { border-color: var(--green-mid); background: var(--white); }
+
+/* RUTAS */
+.ruta-card {
+  background: var(--white);
+  border: 1px solid var(--gray-100);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.ruta-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.ruta-dot { width: 10px; height: 10px; border-radius: 50%; }
+.ruta-name { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.ruta-days { font-size: 11px; color: var(--gray-500); }
+.store-tag {
+  display: inline-flex; align-items: center;
+  background: var(--gray-50); border: 1px solid var(--gray-200);
+  border-radius: 4px; padding: 3px 8px;
+  font-size: 12px; color: var(--gray-700);
+  margin: 2px;
+}
+
+/* CONCILIACION */
+.concil-status { display: flex; align-items: center; gap: 6px; }
+.concil-check { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+.concil-ok { background: var(--green-light); color: var(--green); }
+.concil-pend { background: var(--amber-light); color: var(--amber); }
+
+/* ALERTS */
+.alert {
+  padding: 10px 14px; border-radius: var(--radius-sm);
+  font-size: 13px; display: flex; align-items: flex-start; gap: 8px;
+  margin-bottom: 12px;
+}
+.alert-warn { background: var(--amber-light); border: 1px solid #f5d78a; color: #7a4f0c; }
+.alert-ok { background: var(--green-light); border: 1px solid var(--green-border); color: var(--green); }
+.alert-info { background: var(--blue-light); border: 1px solid #b3ccf0; color: var(--blue); }
+
+/* PROGRESS BAR */
+.progress { height: 6px; background: var(--gray-100); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.progress-fill { height: 100%; border-radius: 3px; background: var(--green-mid); transition: width 0.3s; }
+.progress-fill.warn { background: var(--amber); }
+.progress-fill.danger { background: var(--red); }
+
+/* TABS */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--gray-100); margin-bottom: 20px; }
+.tab-btn {
+  padding: 10px 16px; border: none; background: none;
+  font-family: var(--font); font-size: 13px; font-weight: 400; color: var(--gray-500);
+  cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: all 0.12s;
+}
+.tab-btn:hover { color: var(--gray-900); }
+.tab-btn.active { color: var(--green); font-weight: 500; border-bottom-color: var(--green); }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* MODAL OVERLAY */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  z-index: 100; display: none; align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--white); border-radius: var(--radius);
+  box-shadow: var(--shadow-lg); width: 560px; max-width: 95vw; max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-header {
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--gray-100);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-title { font-size: 15px; font-weight: 600; }
+.modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--gray-500); padding: 4px; }
+.modal-body { padding: 20px 22px; }
+.modal-footer { padding: 14px 22px; border-top: 1px solid var(--gray-100); display: flex; justify-content: flex-end; gap: 10px; }
+
+/* RECEIPT */
+.receipt { font-size: 13px; }
+.receipt-line { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 0.5px solid var(--gray-100); }
+.receipt-total { display: flex; justify-content: space-between; padding: 10px 0 0; font-weight: 600; font-size: 15px; }
+
+/* STATUS TIMELINE */
+.timeline { list-style: none; padding: 0; }
+.timeline li { display: flex; gap: 12px; padding: 6px 0; font-size: 12px; }
+.tl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green-mid); margin-top: 4px; flex-shrink: 0; }
+.tl-dot.pend { background: var(--gray-200); }
+
+/* CHART (pure CSS bar) */
+.bar-chart { display: flex; align-items: flex-end; gap: 8px; height: 100px; padding: 0 4px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bar { width: 100%; border-radius: 3px 3px 0 0; background: var(--green-light); border: 1px solid var(--green-border); min-height: 4px; transition: height 0.3s; }
+.bar.top { background: var(--green-mid); border-color: var(--green); }
+.bar-label { font-size: 10px; color: var(--gray-500); font-family: var(--mono); }
+
+/* PILL ROW */
+.pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+  padding: 4px 10px; border-radius: 20px;
+  font-size: 12px; font-weight: 500;
+  background: var(--gray-100); color: var(--gray-700);
+  border: 1px solid var(--gray-200); cursor: pointer;
+  transition: all 0.12s;
+}
+.pill.active { background: var(--green-light); color: var(--green); border-color: var(--green-border); }
+.pill:hover:not(.active) { background: var(--gray-100); border-color: var(--gray-500); }
+
+/* SUMMARY ROW */
+.summary-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 0.5px solid var(--gray-100);
+  font-size: 13px;
+}
+.summary-row:last-child { border-bottom: none; }
+.summary-label { flex: 1; color: var(--gray-700); display: flex; align-items: center; gap: 8px; }
+.summary-qty { font-family: var(--mono); font-size: 12px; color: var(--gray-500); min-width: 60px; text-align: right; }
+.summary-total { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--gray-900); min-width: 80px; text-align: right; }
+
+hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0; }
+
+.empty-state {
+  text-align: center; padding: 40px 20px; color: var(--gray-500);
+}
+.empty-icon { font-size: 32px; margin-bottom: 8px; }
+.empty-msg { font-size: 13px; }
+
+/* LOGIN */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--gray-50);
+  display: flex; align-items: center; justify-content: center;
+}
+.login-box {
+  width: 340px; max-width: 90vw;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 32px 28px;
+  text-align: center;
+  box-sizing: border-box;
+}
+.login-logo { display:flex; flex-direction:column; align-items:center; gap:8px; margin-bottom:20px; }
+.login-logo img { width:44px;height:44px;border-radius:10px;object-fit:cover }
+.login-title { font-size:20px; font-weight:600; color:var(--gray-900) }
+.login-sub { font-size:12px; color:var(--gray-500) }
+.login-field { text-align:left; margin-bottom:12px; }
+.login-error { color:var(--red); font-size:12px; margin-top:8px; min-height:16px; }
+.login-btn { width:100%; margin-top:6px; }
+.role-badge { font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; text-transform:uppercase; letter-spacing:0.4px; }
+.role-badge.sucursal { background:var(--blue-light); color:var(--blue); }
+.role-badge.bodega { background:var(--amber-light); color:var(--amber); }
+.role-badge.admin { background:var(--green-light); color:var(--green); }
+.logout-link { font-size:11px; color:var(--gray-500); cursor:pointer; text-decoration:underline; }
+.logout-link:hover { color:var(--red); }
+.pedido-locked { opacity:0.55; pointer-events:none; }
+
+/* ============================================================
+   RWD — Fresh Orden opera desde laptop, tablet o celular
+   ============================================================ */
+
+/* TABLET: el sidebar se vuelve una barra horizontal compacta */
+@media (max-width: 900px) {
+  .app { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
+  .sidebar {
+    width: 100%; min-width: 0;
+    flex-direction: row; align-items: center;
+    border-right: none; border-bottom: 1px solid var(--gray-100);
+    overflow-x: auto;
+  }
+  .sidebar-logo { border-bottom: none; border-right: 1px solid var(--gray-100); padding: 10px 14px; flex-shrink: 0; }
+  .nav { display: flex; flex: none; padding: 6px 8px; gap: 2px; overflow-x: auto; }
+  .nav-section-label { display: none; }
+  .nav-item { white-space: nowrap; width: auto; }
+  .sidebar-footer { display: none; }
+  .main { min-height: 100vh; }
+  .content { padding: 16px; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .topbar { padding: 0 16px; flex-wrap: wrap; height: auto; min-height: 56px; }
+}
+
+/* CELULAR: apilar controles, botones a ancho completo, texto compacto */
+@media (max-width: 640px) {
+  .card-body { padding: 14px; }
+  .card-header { padding: 12px 14px 10px; }
+  .form-row { flex-direction: column; gap: 10px; align-items: stretch; }
+  .form-row .form-group { width: 100%; }
+  .topbar-title { font-size: 14px; }
+  .topbar-subtitle { display: none; }
+  .tabs { overflow-x: auto; white-space: nowrap; }
+  table { font-size: 12px; }
+  .login-box { padding: 24px 18px; }
+}
+</style>
+</head>
+<body>
+
+<!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.2.0</div>
+
+
+<!-- LOGIN OVERLAY -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="logo-icon" style="background:none;padding:0;overflow:hidden;width:72px;height:72px;border-radius:16px;margin:0 auto"><img src="../assets/LogoFO.png" style="width:100%;height:100%;border-radius:16px;object-fit:cover" alt="Fresh Orden"></div>
+      <div class="login-title">Fresh Orden</div>
+      <div class="login-sub">Sistema de Operaciones</div>
+    </div>
+    <div class="login-field">
+      <label class="form-label">Correo</label>
+      <input type="email" class="form-input" id="login-user" style="width:100%" autocomplete="username" placeholder="tu.sucursal@freshorden.mx">
+    </div>
+    <div class="login-field">
+      <label class="form-label">Contraseña</label>
+      <input type="password" class="form-input" id="login-pass" style="width:100%" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button class="topbar-btn primary login-btn" onclick="doLogin()">Ingresar</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div class="app" id="app-root" style="display:none">
+<!-- SIDEBAR -->
+<aside class="sidebar" id="app-sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">
+      <div class="logo-icon" style="background:none;padding:0;overflow:hidden"><img src="../assets/LogoFO.png" style="width:40px;height:40px;border-radius:9px;object-fit:cover;object-position:center" alt="Fresh Orden"></div>
+      <div>
+        <div class="logo-text">Fresh Orden</div>
+        <div class="logo-sub">Bodega Central</div>
+      </div>
+    </div>
+  </div>
+  <nav class="nav">
+    <div class="nav-section-label">Principal</div>
+    <button class="nav-item active" onclick="showSection('dashboard')">
+      <span class="nav-icon">📊</span> Dashboard
+    </button>
+    <button class="nav-item" onclick="showSection('pedidos')">
+      <span class="nav-icon">📋</span> Pedidos del Día
+      <span class="nav-badge" id="badge-pedidos">3</span>
+    </button>
+    <button class="nav-item" onclick="showSection('recepcion')">
+      <span class="nav-icon">📦</span> Recepción Bodega
+    </button>
+    <div class="nav-section-label">Operación</div>
+    <button class="nav-item" onclick="showSection('rutas')">
+      <span class="nav-icon">🚛</span> Rutas y Tiendas
+    </button>
+    <button class="nav-item" onclick="showSection('prefactura')">
+      <span class="nav-icon">🧾</span> Pre-Factura
+    </button>
+    <button class="nav-item" onclick="showSection('conciliacion')">
+      <span class="nav-icon">💰</span> Conciliación
+    </button>
+    <div class="nav-section-label">Análisis</div>
+    <button class="nav-item" onclick="showSection('reportes')">
+      <span class="nav-icon">📈</span> Reportes
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div id="user-sidebar" style="margin-bottom:6px"></div>
+    <div id="fecha-sidebar"></div>
+    <div style="margin-top:6px"><span class="logout-link" onclick="doLogout()">Cerrar sesión</span></div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px">
+      <img id="topbar-logo" src="../assets/LogoFO.png" style="height:32px;width:32px;border-radius:6px;object-fit:cover" alt="Fresh Orden">
+      <div>
+        <div class="topbar-title" id="topbar-title">Dashboard</div>
+        <div class="topbar-subtitle" id="topbar-subtitle">Resumen operativo del día</div>
+      </div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <button class="topbar-btn" id="btn-recibir-producto" onclick="showModal('modal-proveedor')">+ Recibir Producto</button>
+    <button class="topbar-btn primary" id="btn-nuevo-pedido-top" onclick="showSection('pedidos')">Nuevo Pedido</button>
+    </div>
+
+  <div class="content" id="main-content">
+
+    <!-- ===== DASHBOARD ===== -->
+    <div class="section active" id="section-dashboard">
+      <div class="grid-4" style="margin-bottom:20px">
+        <div class="stat-card">
+          <div class="stat-label">Pedidos hoy</div>
+          <div class="stat-value" id="stat-pedidos">0</div>
+          <div class="stat-meta">Tiendas activas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Kilos despachados</div>
+          <div class="stat-value" style="color:var(--green)">—</div>
+          <div class="stat-meta">Jitomate + Lechuga</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Cajas despachadas</div>
+          <div class="stat-value" style="color:var(--blue)">—</div>
+          <div class="stat-meta">Cebolla Bl. + Mo.</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Facturas pendientes</div>
+          <div class="stat-value" style="color:var(--amber)">$98,558</div>
+          <div class="stat-meta stat-down">Proveedores</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Tiendas activas por ruta — hoy</div>
+          </div>
+          <div class="card-body">
+            <div id="rutas-hoy-content"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Pagos pendientes proveedores</div>
+          </div>
+          <div class="card-body">
+            <div class="summary-row">
+              <div class="summary-label">🍅 <span>Jitomate</span></div>
+              <div class="summary-total">$44,050</div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-label">🥬 <span>Lechuga Iceberg</span></div>
+              <div class="summary-total">$33,378</div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-label">🧅 <span>Cebolla</span></div>
+              <div class="summary-total">$21,130</div>
+            </div>
+            <hr class="divider">
+            <div class="summary-row" style="font-weight:600;font-size:14px">
+              <div class="summary-label">Total pendiente</div>
+              <div class="summary-total" style="color:var(--red)">$98,558</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Pedidos registrados hoy</div>
+        </div>
+        <div class="card-body">
+          <div id="dashboard-pedidos-table"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PEDIDOS ===== -->
+    <div class="section" id="section-pedidos">
+      <div class="tabs" id="pedidos-tabs-nav">
+        <button class="tab-btn active" id="tab-btn-nuevo" onclick="switchTab('tab-nuevopedido','pedidos-tabs',this)">Nuevo pedido</button>
+        <button class="tab-btn" onclick="switchTab('tab-pedidosdel','pedidos-tabs',this)">Pedidos del día</button>
+        <button class="tab-btn" onclick="switchTab('tab-historial','pedidos-tabs',this)">Historial</button>
+      </div>
+
+      <!-- Tab: Nuevo pedido -->
+      <div class="tab-pane active" id="tab-nuevopedido" data-group="pedidos-tabs">
+        <div class="card" style="max-width:760px">
+          <div class="card-header">
+            <div class="card-title">Datos del pedido</div>
+          </div>
+          <div class="card-body">
+            <div id="ped-locked-msg"></div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Fecha</label>
+                <input type="text" class="form-input" id="ped-fecha-display" readonly style="background:var(--gray-50)">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Tienda</label>
+                <input type="text" class="form-input" id="ped-tienda-display" readonly style="background:var(--gray-50)">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Día de entrega</label>
+                <input type="text" class="form-input" id="ped-diaentrega" readonly placeholder="Pendiente de surtido" style="background:var(--gray-50)">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Estatus</label>
+                <input type="text" class="form-input" id="ped-estatus-display" readonly style="background:var(--gray-50)">
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:4px;margin-bottom:8px">
+              <div style="font-size:11px;font-weight:500;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px">Productos</div>
+              <img id="ped-card-logo" src="" alt="Fresh Orden" style="height:64px;width:auto;object-fit:contain;display:none">
+            </div>
+
+            <div class="table-wrap">
+              <table style="width:100%;font-size:13px;border-collapse:collapse;table-layout:fixed">
+                <colgroup>
+                  <col>
+                  <col style="width:74px">
+                  <col style="width:56px">
+                  <col style="width:74px">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style="text-align:left;padding:6px 4px 6px 8px;font-size:11px;color:var(--gray-500);font-weight:500;border-bottom:1px solid var(--gray-100)">Producto</th>
+                    <th style="text-align:left;padding:6px 4px;font-size:11px;color:var(--gray-500);font-weight:500;border-bottom:1px solid var(--gray-100)">Precio</th>
+                    <th style="text-align:center;padding:6px 2px;font-size:11px;color:var(--gray-500);font-weight:500;border-bottom:1px solid var(--gray-100)">Cant.</th>
+                    <th style="text-align:right;padding:6px 8px 6px 4px;font-size:11px;color:var(--gray-500);font-weight:500;border-bottom:1px solid var(--gray-100)">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody id="ped-products-body"></tbody>
+              </table>
+            </div>
+
+            <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+              <button class="topbar-btn" onclick="clearPedido()">Limpiar</button>
+              <button class="topbar-btn primary" id="btn-guardar-pedido" onclick="savePedido()">Guardar pedido</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- Tab: Pedidos del día -->
+      <div class="tab-pane" id="tab-pedidosdel" data-group="pedidos-tabs">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Pedidos registrados</div>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button class="topbar-btn" onclick="exportResumen()">Exportar resumen</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="pedidos-del-dia-table"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="card-header">
+            <div class="card-title">Resumen de salidas bodega</div>
+          </div>
+          <div class="card-body">
+            <div id="resumen-salidas"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Historial -->
+      <div class="tab-pane" id="tab-historial" data-group="pedidos-tabs">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Historial — últimos 5 pedidos</div>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Producto</label>
+                <select class="form-select" id="hist-prod" onchange="renderHistorial()">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+            </div>
+            <div id="historial-table"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== RECEPCION BODEGA ===== -->
+    <div class="section" id="section-recepcion">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Registrar recepción de proveedor</div>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Fecha</label>
+                <input type="date" class="form-input" id="rec-fecha">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Proveedor</label>
+                <select class="form-select" id="rec-proveedor">
+                  <option>Proveedor Jitomate</option>
+                  <option>Proveedor Lechuga</option>
+                  <option>Proveedor Cebolla</option>
+                  <option>Proveedor Guantes</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Producto</label>
+                <select class="form-select" id="rec-producto">
+                  <option>🍅 Jitomate</option>
+                  <option>🥬 Lechuga Iceberg</option>
+                  <option>🧅 Cebolla Blanca</option>
+                  <option>🟣 Cebolla Morada</option>
+                  <option>🧤 Guantes Nitrilo</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Cajas recibidas</label>
+                <input type="number" class="form-input" id="rec-cajas" placeholder="0" min="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Kilos brutos</label>
+                <input type="number" class="form-input" id="rec-kg-bruto" placeholder="0" min="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Kilos netos</label>
+                <input type="number" class="form-input" id="rec-kg-neto" placeholder="0" min="0">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Cajas mal estado</label>
+                <input type="number" class="form-input" id="rec-malos" placeholder="0" min="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Faltantes</label>
+                <input type="number" class="form-input" id="rec-faltantes" placeholder="0" min="0">
+              </div>
+              <div class="form-group" style="flex:1">
+                <label class="form-label">Reposición solicitada</label>
+                <select class="form-select" id="rec-repos">
+                  <option value="no">No</option>
+                  <option value="si">Sí — pendiente</option>
+                  <option value="recibida">Sí — ya recibida</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group" style="width:100%;margin-bottom:16px">
+              <label class="form-label">Notas</label>
+              <textarea class="form-input" id="rec-notas" rows="2" style="resize:vertical;width:100%"></textarea>
+            </div>
+            <button class="topbar-btn primary" style="width:100%" onclick="saveRecepcion()">Guardar recepción</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-header">
+              <div class="card-title">Recepciones recientes</div>
+            </div>
+            <div class="card-body" style="padding:0">
+              <div id="recepciones-list"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Repociones pendientes</div>
+            </div>
+            <div class="card-body">
+              <div id="reposiciones-list">
+                <div class="alert alert-warn">⚠️ Sin reposiciones activas registradas</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== RUTAS ===== -->
+    <div class="section" id="section-rutas">
+      <div class="grid-3" style="margin-bottom:20px">
+        <div class="ruta-card">
+          <div class="ruta-header">
+            <div class="ruta-dot" style="background:#2563a8"></div>
+            <div>
+              <div class="ruta-name">Ruta A</div>
+              <div class="ruta-days">Lunes y Jueves</div>
+            </div>
+          </div>
+          <div class="pill-row" id="ruta-a-stores"></div>
+        </div>
+        <div class="ruta-card">
+          <div class="ruta-header">
+            <div class="ruta-dot" style="background:#1a6b3f"></div>
+            <div>
+              <div class="ruta-name">Ruta B</div>
+              <div class="ruta-days">Martes y Viernes</div>
+            </div>
+          </div>
+          <div class="pill-row" id="ruta-b-stores"></div>
+        </div>
+        <div class="ruta-card">
+          <div class="ruta-header">
+            <div class="ruta-dot" style="background:#c27c14"></div>
+            <div>
+              <div class="ruta-name">Ruta C</div>
+              <div class="ruta-days">Miércoles y Sábado</div>
+            </div>
+          </div>
+          <div class="pill-row" id="ruta-c-stores"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Directorio de tiendas</div>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tienda</th>
+                  <th>Ruta</th>
+                  <th>Días de entrega</th>
+                  <th>Vol. semanal</th>
+                  <th>Estatus</th>
+                </tr>
+              </thead>
+              <tbody id="tiendas-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PRE-FACTURA ===== -->
+    <div class="section" id="section-prefactura">
+      <div class="form-row" style="margin-bottom:16px">
+        <div class="form-group">
+          <label class="form-label">Tienda</label>
+          <select class="form-select" id="pf-tienda" onchange="renderPreFactura()">
+            <option value="">Seleccionar tienda...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pedido</label>
+          <select class="form-select" id="pf-pedido" onchange="renderPreFactura()">
+            <option value="">Seleccionar pedido...</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:8px">
+          <button class="topbar-btn" onclick="renderPreFactura()">Generar</button>
+          <button class="topbar-btn primary" onclick="approvePreFactura()">Aprobar → Factura</button>
+        </div>
+      </div>
+
+      <div id="prefactura-content">
+        <div class="empty-state">
+          <div class="empty-icon">🧾</div>
+          <div class="empty-msg">Selecciona una tienda y pedido para generar la pre-factura</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== CONCILIACION ===== -->
+    <div class="section" id="section-conciliacion">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('tab-concil-prov','concil-tabs',this)">Vs Proveedores</button>
+        <button class="tab-btn" onclick="switchTab('tab-concil-cli','concil-tabs',this)">Vs Clientes (Dragon Foods)</button>
+      </div>
+
+      <div class="tab-pane active" id="tab-concil-prov" data-group="concil-tabs">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Conciliación con proveedores</div>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Proveedor / Producto</th>
+                    <th>Factura</th>
+                    <th style="text-align:right">Monto</th>
+                    <th style="text-align:right">Pagado</th>
+                    <th style="text-align:right">Saldo</th>
+                    <th>Estatus</th>
+                  </tr>
+                </thead>
+                <tbody id="concil-prov-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="tab-concil-cli" data-group="concil-tabs">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Conciliación con Dragon Foods — Mayo 2026</div>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tienda</th>
+                    <th style="text-align:right">Cajas Jit.</th>
+                    <th style="text-align:right">Cajas Lech.</th>
+                    <th style="text-align:right">Cajas C.Bl.</th>
+                    <th style="text-align:right">Cajas C.Mo.</th>
+                    <th style="text-align:right">Total venta</th>
+                    <th>Estatus</th>
+                  </tr>
+                </thead>
+                <tbody id="concil-cli-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== REPORTES ===== -->
+    <div class="section" id="section-reportes">
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Ventas por tienda (Mayo 2026 parcial)</div>
+          </div>
+          <div class="card-body">
+            <div id="reporte-tiendas-chart"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Margen bruto por producto</div>
+          </div>
+          <div class="card-body">
+            <table style="width:100%;font-size:13px;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:5px 8px;font-size:11px;color:var(--gray-500);font-weight:500;border-bottom:1px solid var(--gray-100)">Producto</th>
+                  <th style="text-align:right;padding:5px 8px;font-size:11px;color:var(--gray-500);font-weight:500;border-bottom:1px solid var(--gray-100)">P.Compra caja</th>
+                  <th style="text-align:right;padding:5px 8px;font-size:11px;color:var(--gray-500);font-weight:500;border-bottom:1px solid var(--gray-100)">P.Venta caja</th>
+                  <th style="text-align:right;padding:5px 8px;font-size:11px;color:var(--gray-500);font-weight:500;border-bottom:1px solid var(--gray-100)">Margen</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>🍅 Jitomate</td>
+                  <td class="mono" style="text-align:right">$400</td>
+                  <td class="mono" style="text-align:right">$428</td>
+                  <td style="text-align:right"><span class="badge badge-green">7.0%</span></td>
+                </tr>
+                <tr>
+                  <td>🥬 Lechuga</td>
+                  <td class="mono" style="text-align:right">$500</td>
+                  <td class="mono" style="text-align:right">$730</td>
+                  <td style="text-align:right"><span class="badge badge-green">46.0%</span></td>
+                </tr>
+                <tr>
+                  <td>🧅 Ceb. Blanca</td>
+                  <td class="mono" style="text-align:right">$370</td>
+                  <td class="mono" style="text-align:right">$400</td>
+                  <td style="text-align:right"><span class="badge badge-amber">8.1%</span></td>
+                </tr>
+                <tr>
+                  <td>🟣 Ceb. Morada</td>
+                  <td class="mono" style="text-align:right">$300</td>
+                  <td class="mono" style="text-align:right">$300</td>
+                  <td style="text-align:right"><span class="badge badge-red">0.0%</span></td>
+                </tr>
+                <tr>
+                  <td>🧤 Guantes</td>
+                  <td class="mono" style="text-align:right">$6.40</td>
+                  <td class="mono" style="text-align:right">$7.36</td>
+                  <td style="text-align:right"><span class="badge badge-green">15.0%</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Top tiendas — Jitomate (Mayo 2026)</div>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Tienda</th>
+                  <th style="text-align:right">Cajas prov</th>
+                  <th style="text-align:right">Cajas cli</th>
+                  <th style="text-align:right">Kg prov</th>
+                  <th style="text-align:right">Kg cli</th>
+                  <th style="text-align:right">Venta est.</th>
+                  <th>Ruta</th>
+                </tr>
+              </thead>
+              <tbody id="top-tiendas-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</main>
+</div><!-- /app -->
+
+<!-- MODAL: Recibir proveedor -->
+<div class="modal-overlay" id="modal-proveedor">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Recepción rápida de proveedor</div>
+      <button class="modal-close" onclick="closeModal('modal-proveedor')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Producto</label>
+          <select class="form-select" id="qrec-prod">
+            <option>🍅 Jitomate</option>
+            <option>🥬 Lechuga Iceberg</option>
+            <option>🧅 Cebolla Blanca</option>
+            <option>🟣 Cebolla Morada</option>
+            <option>🧤 Guantes Nitrilo</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cajas</label>
+          <input type="number" class="form-input" id="qrec-cajas" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kilos netos</label>
+          <input type="number" class="form-input" id="qrec-kg" placeholder="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">¿Faltantes o mal estado?</label>
+          <input type="number" class="form-input" id="qrec-faltantes" placeholder="0">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label class="form-label">¿Solicitar reposición?</label>
+          <select class="form-select" id="qrec-repos">
+            <option value="no">No</option>
+            <option value="si">Sí</option>
+          </select>
+        </div>
+      </div>
+      <div class="alert alert-info" style="margin-top:4px">ℹ️ La recepción se registra sin inventario permanente. El control es por despacho diario.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="topbar-btn" onclick="closeModal('modal-proveedor')">Cancelar</button>
+      <button class="topbar-btn primary" onclick="quickRecepcion()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Pedido guardado -->
+<div class="modal-overlay" id="modal-pedido-ok">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Pedido registrado ✓</div>
+      <button class="modal-close" onclick="closeModal('modal-pedido-ok')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-ok" style="margin-bottom:16px">✅ El pedido fue guardado correctamente</div>
+      <div class="receipt" id="receipt-content"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="topbar-btn" onclick="closeModal('modal-pedido-ok')">Cerrar</button>
+      <button class="topbar-btn primary" onclick="closeModal('modal-pedido-ok');showSection('prefactura')">Generar Pre-Factura</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+// PRODUCTS y TIENDAS ya NO se hardcodean: se cargan desde Supabase
+// (tablas `productos` y `sucursales`) en loadCatalogos(), más abajo.
+let PRODUCTS = [];
+let TIENDAS = [];
+
+const RUTAS = {
+  A: { name:'Ruta A', dias:'Lunes y Jueves', color:'#2563a8' },
+  B: { name:'Ruta B', dias:'Martes y Viernes', color:'#1a6b3f' },
+  C: { name:'Ruta C', dias:'Miércoles y Sábado', color:'#c27c14' },
+};
+
+// ============================================================
+// USUARIOS Y ROLES (Etapa 1) — ahora vía Supabase Auth + tabla `perfiles`
+// Ya no hay contraseñas en el código fuente. checkSession/doLogin/doLogout
+// reales viven en el bloque "SUPABASE INTEGRATION" al final del archivo.
+// ============================================================
+let currentUser = null;
+
+// Secciones visibles por rol en el sidebar
+const SECCIONES_POR_ROL = {
+  sucursal:    ['pedidos'],
+  corporativo: ['pedidos','reportes'],
+  bodega:      ['pedidos','recepcion'],
+  gerencia:    ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','reportes'],
+  admin:       ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','reportes'],
+};
+
+function applyRoleUI() {
+  if (!currentUser) return;
+  const permitidas = SECCIONES_POR_ROL[currentUser.rol] || [];
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    const sec = btn.getAttribute('onclick').match(/showSection\('([^']+)'\)/)?.[1];
+    btn.style.display = permitidas.includes(sec) ? '' : 'none';
+  });
+  document.querySelectorAll('.nav-section-label').forEach(l => {
+    // Oculta encabezados de sección si ningún botón visible le sigue (simplificado: solo Admin ve todos)
+    l.style.display = currentUser.rol === 'admin' ? '' : (l.textContent === 'Principal' ? '' : 'none');
+  });
+  // Muestra la primera sección permitida
+  showSection(permitidas[0]);
+
+  // Etiqueta de usuario en sidebar
+  const label = currentUser.rol === 'sucursal'
+    ? (TIENDAS.find(t=>t.id===currentUser.tiendaId)?.name || currentUser.usuario)
+    : currentUser.usuario;
+  document.getElementById('user-sidebar').innerHTML =
+    `<div style="font-size:12px;font-weight:500;color:var(--gray-900)">${label}</div>
+     <span class="role-badge ${currentUser.rol}">${currentUser.rol}</span>`;
+
+  renderPedidosDelDia();
+
+  // Rol Bodega: no crea pedidos, entra directo a "Pedidos del día"
+  const tabNuevo = document.getElementById('tab-btn-nuevo');
+  if (tabNuevo) tabNuevo.style.display = (currentUser.rol === 'bodega') ? 'none' : '';
+  if (currentUser.rol === 'bodega') {
+    const btnPedidosDia = document.querySelectorAll('#pedidos-tabs-nav .tab-btn')[1];
+    if (btnPedidosDia) btnPedidosDia.click();
+  }
+
+  // Rol Sucursal: interfaz simplificada — sin sidebar, sin botones de topbar,
+  // encabezado reducido a la descripción en letras grandes.
+  const isSucursal = currentUser.rol === 'sucursal';
+  const sidebarEl = document.getElementById('app-sidebar');
+  const topbarLogoEl = document.getElementById('topbar-logo');
+  const btnRecibir = document.getElementById('btn-recibir-producto');
+  const btnNuevoTop = document.getElementById('btn-nuevo-pedido-top');
+  const titleEl = document.getElementById('topbar-title');
+  const subtitleEl = document.getElementById('topbar-subtitle');
+
+  if (sidebarEl) sidebarEl.style.display = isSucursal ? 'none' : '';
+  if (topbarLogoEl) topbarLogoEl.style.display = isSucursal ? 'none' : '';
+  if (btnRecibir) btnRecibir.style.display = isSucursal ? 'none' : '';
+  if (btnNuevoTop) btnNuevoTop.style.display = isSucursal ? 'none' : '';
+  if (titleEl) titleEl.style.display = isSucursal ? 'none' : '';
+  if (subtitleEl) {
+    subtitleEl.style.fontSize = isSucursal ? '18px' : '';
+    subtitleEl.style.color = isSucursal ? 'var(--gray-900)' : '';
+    subtitleEl.style.fontWeight = isSucursal ? '500' : '';
+  }
+}
+const HIST_DATA = [
+  { fecha:'2026-05-01', tienda:'Satélite', jit_cajProv:7, jit_cajCli:5, jit_kgProv:13, jit_kgCli:22, lech_cajProv:7, lech_cajCli:5, cb_cajProv:0, cb_cajCli:0, cm_cajProv:0, cm_cajCli:0, guantes:0 },
+  { fecha:'2026-05-01', tienda:'Pedregal', jit_cajProv:5, jit_cajCli:4, jit_kgProv:9, jit_kgCli:13, lech_cajProv:5, lech_cajCli:4, cb_cajProv:0, cb_cajCli:0, cm_cajProv:0, cm_cajCli:0, guantes:50 },
+  { fecha:'2026-05-01', tienda:'Interlomas', jit_cajProv:3, jit_cajCli:3, jit_kgProv:4, jit_kgCli:7, lech_cajProv:3, lech_cajCli:3, cb_cajProv:0, cb_cajCli:0, cm_cajProv:0, cm_cajCli:0, guantes:0 },
+  { fecha:'2026-05-01', tienda:'Alfredo del Mazo', jit_cajProv:3, jit_cajCli:5, jit_kgProv:15, jit_kgCli:10, lech_cajProv:3, lech_cajCli:5, cb_cajProv:0, cb_cajCli:0, cm_cajProv:0, cm_cajCli:0, guantes:0 },
+  { fecha:'2026-05-01', tienda:'Plaza Mia', jit_cajProv:3, jit_cajCli:3, jit_kgProv:2, jit_kgCli:4, lech_cajProv:3, lech_cajCli:3, cb_cajProv:0, cb_cajCli:0, cm_cajProv:0, cm_cajCli:0, guantes:0 },
+  { fecha:'2026-05-01', tienda:'Sendero', jit_cajProv:4, jit_cajCli:4, jit_kgProv:6, jit_kgCli:8, lech_cajProv:4, lech_cajCli:4, cb_cajProv:0, cb_cajCli:0, cm_cajProv:0, cm_cajCli:0, guantes:0 },
+  { fecha:'2026-05-01', tienda:'Town', jit_cajProv:2, jit_cajCli:2, jit_kgProv:5, jit_kgCli:10, lech_cajProv:2, lech_cajCli:2, cb_cajProv:0, cb_cajCli:0, cm_cajProv:0, cm_cajCli:0, guantes:0 },
+];
+
+const PAGOS_PROV = [
+  { fecha:'2026-04-30', producto:'Jitomate',  factura:'FAC-2604-001', monto:31000, pagado:0 },
+  { fecha:'2026-04-04', producto:'Jitomate',  factura:'FAC-2604-002', monto:13050, pagado:13050 },
+  { fecha:'2026-05-04', producto:'Lechuga',   factura:'FAC-2605-001', monto:13020, pagado:0 },
+  { fecha:'2026-04-30', producto:'Lechuga',   factura:'FAC-2604-003', monto:20358, pagado:20358 },
+  { fecha:'2026-04-01', producto:'Cebolla',   factura:'FAC-2604-004', monto:21130, pagado:0 },
+];
+
+// App state
+let pedidos = [];
+let recepciones = [];
+let lastPedido = null;
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  // Set dates
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('rec-fecha').value = today;
+  const f = new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
+  document.getElementById('fecha-sidebar').textContent = f.charAt(0).toUpperCase()+f.slice(1);
+  document.getElementById('ped-fecha-display').value = f.charAt(0).toUpperCase()+f.slice(1);
+  document.getElementById('ped-tienda-display').value = currentUser?.rol === 'sucursal'
+    ? (TIENDAS.find(t => t.id === currentUser.tiendaId)?.name || '—')
+    : 'Todas / N-A';
+
+  // Populate tienda selects (pantallas de admin/gerencia que sí requieren elegir tienda)
+  const tiendaSelects = document.querySelectorAll('#pf-tienda');
+  tiendaSelects.forEach(sel => {
+    TIENDAS.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.id; o.textContent = t.name;
+      sel.appendChild(o);
+    });
+  });
+
+  // Populate filtro de producto en Historial
+  const histProdSel = document.getElementById('hist-prod');
+  if (histProdSel) {
+    PRODUCTS.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id; o.textContent = p.name;
+      histProdSel.appendChild(o);
+    });
+  }
+
+  // Logo del card de pedido (reutiliza la imagen ya embebida, sin duplicarla)
+  const pedLogo = document.getElementById('ped-card-logo');
+  const sourceLogo = document.querySelector('.sidebar-logo img');
+  if (pedLogo && sourceLogo) { pedLogo.src = sourceLogo.src; pedLogo.style.display = ''; }
+
+  // Build pedido product rows
+  buildPedidoRows();
+
+  // Render rutas
+  renderRutas();
+  renderTiendasTable();
+  renderHoyRutas();
+  renderConciliaciones();
+  renderDashboardPedidos();
+  renderRecepciones();
+  renderTopTiendas();
+  renderReporteTiendas();
+  updatePedidoBadge();
+
+  // Subtotales en vivo
+  document.getElementById('ped-products-body').addEventListener('input', updateSubtotales);
+}
+
+function buildPedidoRows() {
+  const tbody = document.getElementById('ped-products-body');
+  tbody.innerHTML = '';
+  PRODUCTS.forEach(p => {
+    const tr = document.createElement('tr');
+    const nombreCorto = p.name.length > 20 ? p.name.slice(0, 20) + '…' : p.name;
+    tr.innerHTML = `
+      <td style="padding:6px 4px 6px 8px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.name}">${p.icon} ${nombreCorto}</td>
+      <td class="mono" style="padding:6px 4px;text-align:left;white-space:nowrap;font-size:12px">$${(+p.pCli).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}/${p.unit}</td>
+      <td style="padding:4px 2px;text-align:center">
+        <input type="number" class="pedido-input" data-prod="${p.id}" placeholder="0" min="0" max="999" step="1" style="width:3em;text-align:center;padding:4px 2px">
+      </td>
+      <td class="mono" style="padding:6px 8px 6px 4px;text-align:right" id="subtotal-${p.id}">$0.00</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function updateSubtotales() {
+  PRODUCTS.forEach(p => {
+    const cant = +getInput(p.id) || 0;
+    const subtotal = cant * (+p.pCli || 0);
+    const cell = document.getElementById('subtotal-'+p.id);
+    if (cell) cell.textContent = '$'+subtotal.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+  });
+}
+
+function getInput(prodId) {
+  const el = document.querySelector(`input[data-prod="${prodId}"]`);
+  return el ? el.value : 0;
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+const SECTION_META = {
+  dashboard:    { title:'Dashboard', sub:'Resumen operativo del día' },
+  pedidos:      { title:'Pedidos del Día', sub:'Captura y seguimiento de pedidos' },
+  recepcion:    { title:'Recepción Bodega', sub:'Registro de entradas de proveedor' },
+  rutas:        { title:'Rutas y Tiendas', sub:'Configuración de rutas de distribución' },
+  prefactura:   { title:'Pre-Factura', sub:'Generación de pre-facturas por tienda' },
+  conciliacion: { title:'Conciliación', sub:'Facturas vs pagos' },
+  reportes:     { title:'Reportes', sub:'Análisis de operación' },
+};
+
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('section-'+id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => {
+    if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${id}'`)) b.classList.add('active');
+  });
+  const m = SECTION_META[id];
+  document.getElementById('topbar-title').textContent = m.title;
+  document.getElementById('topbar-subtitle').textContent = m.sub;
+  if (id==='pedidos') {
+    switchTab('tab-nuevopedido','pedidos-tabs', document.querySelector('.tab-btn'));
+    renderPedidosDelDia();
+  }
+  if (id==='prefactura') populatePfPedidos();
+}
+
+function switchTab(tabId, group, btn) {
+  document.querySelectorAll(`[data-group="${group}"]`).forEach(p => p.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  if(btn){
+    const parentTabs = btn.closest('.tabs');
+    if(parentTabs) parentTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  if(tabId==='tab-nuevopedido') cargarPedidoHoy();
+  if(tabId==='tab-pedidosdel') { renderPedidosDelDia(); renderResumenSalidas(); }
+  if(tabId==='tab-historial') renderHistorial();
+}
+
+// ============================================================
+// MODALS
+// ============================================================
+function showModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); });
+});
+
+// ============================================================
+// PEDIDOS
+// ============================================================
+// La función savePedido() real (conectada a Supabase) se define
+// más abajo, en el bloque "SUPABASE INTEGRATION".
+
+function clearPedido() {
+  document.querySelectorAll('.pedido-input').forEach(i => i.value='');
+  updateSubtotales();
+}
+
+function updatePedidoBadge() {
+  const t = pedidos.filter(p => p.fecha === new Date().toISOString().split('T')[0]).length;
+  const b = document.getElementById('badge-pedidos');
+  if (t > 0) { b.textContent = t; b.style.display=''; }
+  else b.style.display='none';
+}
+
+const ESTADOS_PEDIDO = {
+  capturado:    { label:'Capturado',    cls:'badge-blue'  },
+  surtido:      { label:'Surtido',      cls:'badge-green' },
+  prefacturado: { label:'Pre-facturado',cls:'badge-amber' },
+  facturado:    { label:'Facturado',    cls:'badge-green' },
+  cancelado:    { label:'Cancelado',    cls:'badge-gray'  },
+};
+
+function renderDashboardPedidos() {
+  const el = document.getElementById('dashboard-pedidos-table');
+  if (!pedidos.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">Sin pedidos registrados hoy. Captura el primer pedido.</div></div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tienda</th><th>Fecha</th><th>Estatus</th></tr></thead>
+        <tbody>${pedidos.map(p=>{
+          const est = ESTADOS_PEDIDO[p.estatus] || ESTADOS_PEDIDO.capturado;
+          return `<tr>
+            <td class="bold">${p.tiendaNombre}</td>
+            <td class="mono">${p.fecha}</td>
+            <td><span class="badge ${est.cls}">${est.label}</span></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('stat-pedidos').textContent = pedidos.length;
+}
+
+function renderPedidosDelDia() {
+  const el = document.getElementById('pedidos-del-dia-table');
+  if (!el || !currentUser) return;
+  const visibles = currentUser.rol === 'sucursal'
+    ? pedidos.filter(p => p.tiendaId === currentUser.tiendaId)
+    : pedidos;
+  if (!visibles.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">Sin pedidos registrados. Ve a "Nuevo pedido".</div></div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tienda</th>${PRODUCTS.map(p=>`<th>${p.icon} ${p.name}</th>`).join('')}<th>Estatus</th></tr></thead>
+        <tbody>${visibles.map(p=>{
+          const est = ESTADOS_PEDIDO[p.estatus] || ESTADOS_PEDIDO.capturado;
+          return `<tr>
+            <td class="bold">${p.tiendaNombre}</td>
+            ${PRODUCTS.map(prod => {
+              const d = p.prods[prod.id];
+              return `<td class="mono">${d ? d.cantSolicitada : 0} ${prod.unit}</td>`;
+            }).join('')}
+            <td><span class="badge ${est.cls}">${est.label}</span></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderResumenSalidas() {
+  const el = document.getElementById('resumen-salidas');
+  if (!el) return;
+  if (!pedidos.length) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Sin datos</div></div>'; return; }
+  el.innerHTML = PRODUCTS.map(p => {
+    const totalCant = pedidos.reduce((sum, ped) => sum + (ped.prods[p.id]?.cantSolicitada || 0), 0);
+    const venta = totalCant * p.pCli;
+    return `<div class="summary-row">
+      <div class="summary-label">${p.icon} ${p.name}</div>
+      <div class="summary-qty">${totalCant} ${p.unit}</div>
+      <div class="summary-total">$${venta.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+    </div>`;
+  }).join('');
+}
+
+// Nota: las acciones de Bodega (tomar / marcar surtido) viven en el
+// próximo módulo a construir ("Bodega surte pedido"). Por ahora esta
+// vista es informativa.
+
+function exportResumen() { alert('En producción: genera un PDF/Excel con el resumen del día para enviar al staff corporativo.'); }
+
+// ============================================================
+// RECEPCION
+// ============================================================
+function saveRecepcion() {
+  const rec = {
+    fecha: document.getElementById('rec-fecha').value,
+    proveedor: document.getElementById('rec-proveedor').value,
+    producto: document.getElementById('rec-producto').value,
+    cajas: +document.getElementById('rec-cajas').value||0,
+    kgBruto: +document.getElementById('rec-kg-bruto').value||0,
+    kgNeto: +document.getElementById('rec-kg-neto').value||0,
+    malos: +document.getElementById('rec-malos').value||0,
+    faltantes: +document.getElementById('rec-faltantes').value||0,
+    repos: document.getElementById('rec-repos').value,
+    notas: document.getElementById('rec-notas').value,
+    creadoEn: new Date().toISOString()
+  };
+  recepciones.unshift(rec);
+  renderRecepciones();
+  alert('✅ Recepción guardada correctamente');
+}
+
+function renderRecepciones() {
+  const el = document.getElementById('recepciones-list');
+  if (!recepciones.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-msg">Sin recepciones registradas</div></div>';
+    return;
+  }
+  el.innerHTML = recepciones.slice(0,5).map(r => `
+    <div style="padding:10px 20px;border-bottom:0.5px solid var(--gray-100);font-size:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="bold" style="font-size:13px">${r.producto}</span>
+        <span class="badge ${r.malos||r.faltantes ? 'badge-amber':'badge-green'}">${r.malos||r.faltantes ? '⚠️ Con diferencias':'✓ OK'}</span>
+      </div>
+      <div style="color:var(--gray-500);margin-top:3px">${r.cajas} cajas · ${r.kgNeto} kg neto · ${r.fecha}</div>
+      ${r.malos ? `<div style="color:var(--amber);margin-top:2px">⚠️ ${r.malos} cajas mal estado ${r.repos==='si'?'— Reposición solicitada':''}</div>` : ''}
+    </div>`).join('');
+}
+
+function quickRecepcion() {
+  alert('✅ Recepción rápida registrada. Ve a la sección Recepción Bodega para el detalle completo.');
+  closeModal('modal-proveedor');
+}
+
+// ============================================================
+// RUTAS
+// ============================================================
+function renderRutas() {
+  ['A','B','C'].forEach(r => {
+    const el = document.getElementById(`ruta-${r.toLowerCase()}-stores`);
+    TIENDAS.filter(t => t.ruta === r).forEach(t => {
+      const span = document.createElement('span');
+      span.className = 'store-tag';
+      span.textContent = t.name + (t.semanal ? ' *':'');
+      el.appendChild(span);
+    });
+  });
+}
+
+function renderTiendasTable() {
+  const tbody = document.getElementById('tiendas-table');
+  tbody.innerHTML = TIENDAS.map(t => `
+    <tr>
+      <td class="bold">${t.name}</td>
+      <td><span class="badge badge-${t.ruta==='A'?'blue':t.ruta==='B'?'green':'amber'}">${RUTAS[t.ruta].name}</span></td>
+      <td style="color:var(--gray-500);font-size:12px">${RUTAS[t.ruta].dias}</td>
+      <td><span class="badge ${t.vol==='alto'?'badge-green':'badge-gray'}">${t.vol}</span></td>
+      <td><span class="badge badge-green">Activa</span></td>
+    </tr>`).join('');
+}
+
+function renderHoyRutas() {
+  const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const hoy = dias[new Date().getDay()];
+  let html = '';
+  if (['lunes','jueves'].includes(hoy)) html += rutaRow('A');
+  if (['martes','viernes'].includes(hoy)) html += rutaRow('B');
+  if (['miércoles','sábado'].includes(hoy)) html += rutaRow('C');
+  if (!html) html = '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-msg">Hoy es domingo — sin entregas programadas</div></div>';
+  document.getElementById('rutas-hoy-content').innerHTML = html;
+}
+
+function rutaRow(r) {
+  const stores = TIENDAS.filter(t => t.ruta === r && !t.semanal);
+  return `<div style="margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <div style="width:8px;height:8px;border-radius:50%;background:${RUTAS[r].color}"></div>
+      <span style="font-size:12px;font-weight:600;color:var(--gray-900)">${RUTAS[r].name}</span>
+      <span style="font-size:11px;color:var(--gray-500)">${stores.length} tiendas</span>
+    </div>
+    <div class="pill-row">${stores.map(s=>`<span class="store-tag">${s.name}</span>`).join('')}</div>
+  </div>`;
+}
+
+// ============================================================
+// PRE-FACTURA
+// ============================================================
+function populatePfPedidos() {
+  const sel = document.getElementById('pf-pedido');
+  sel.innerHTML = '<option value="">Seleccionar...</option>';
+  const tiendaId = document.getElementById('pf-tienda').value;
+  const filtered = tiendaId ? pedidos.filter(p => p.tiendaId === tiendaId) : pedidos;
+  filtered.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = `${p.id.split('-')[1]} — ${p.fecha}`;
+    sel.appendChild(o);
+  });
+}
+
+document.getElementById('pf-tienda').addEventListener('change', populatePfPedidos);
+
+function renderPreFactura() {
+  const pedId = document.getElementById('pf-pedido').value;
+  const ped = pedidos.find(p => p.id === pedId);
+  if (!ped) return;
+
+  const t = TIENDAS.find(x => x.id === ped.tiendaId);
+  let rows = '', total = 0;
+  PRODUCTS.forEach(p => {
+    const d = ped.prods[p.id];
+    if (!d.cajCli && !d.kgCli) return;
+    const subtotal = d.cajCli*p.pCajaCli + d.kgCli*p.pKgCli;
+    total += subtotal;
+    rows += `
+      <tr>
+        <td>${p.icon} ${p.name}</td>
+        <td class="mono" style="text-align:right">${d.cajCli}</td>
+        <td class="mono" style="text-align:right">$${p.pCajaCli.toFixed(2)}</td>
+        <td class="mono" style="text-align:right">${d.kgCli}</td>
+        <td class="mono" style="text-align:right">$${p.pKgCli.toFixed(2)}</td>
+        <td class="mono bold" style="text-align:right">$${subtotal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+      </tr>`;
+  });
+  const iva = total * 0.16;
+
+  document.getElementById('prefactura-content').innerHTML = `
+    <div class="card" style="max-width:700px">
+      <div class="card-header">
+        <div>
+          <div class="card-title">PRE-FACTURA ${ped.id}</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px">Borrador — pendiente de aprobación</div>
+        </div>
+        <div style="margin-left:auto;text-align:right;font-size:12px;color:var(--gray-500)">
+          <div>Fecha: <strong>${ped.fecha}</strong></div>
+          <div>Ruta: <strong>${RUTAS[ped.ruta].name}</strong></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div style="display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--gray-100)">
+          <div>
+            <div style="font-size:11px;color:var(--gray-500);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Facturar a</div>
+            <div style="font-size:15px;font-weight:600;margin-top:2px">Dragon Foods — ${ped.tiendaNombre}</div>
+            <div style="font-size:12px;color:var(--gray-500)">Tienda ${t.name}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:11px;color:var(--gray-500);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Emitida por</div>
+            <div style="font-size:15px;font-weight:600;margin-top:2px">Fresh Orden S.A. de C.V.</div>
+            <div style="font-size:12px;color:var(--gray-500)">Proveedor materia prima</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th style="text-align:right">Cajas</th>
+                <th style="text-align:right">P/Caja</th>
+                <th style="text-align:right">Kg</th>
+                <th style="text-align:right">P/Kg</th>
+                <th style="text-align:right">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:var(--gray-50);border-radius:var(--radius-sm);max-width:280px;margin-left:auto">
+          <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">Subtotal</span><span class="mono">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+          <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">IVA 16%</span><span class="mono">$${iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+          <div class="receipt-total"><span>Total</span><span class="mono" style="color:var(--green)">$${(total+iva).toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
+          <span class="badge badge-amber">⏳ Pre-factura — borrador</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function approvePreFactura() {
+  const pedId = document.getElementById('pf-pedido').value;
+  if (!pedId) { alert('Selecciona un pedido primero'); return; }
+  const ped = pedidos.find(p => p.id === pedId);
+  if (ped) ped.estatus = 'facturado';
+  renderPreFactura();
+  alert('✅ Pre-factura aprobada. Lista para enviar al cliente.');
+}
+
+// ============================================================
+// CONCILIACION
+// ============================================================
+function renderConciliaciones() {
+  // Proveedores
+  const tbodyP = document.getElementById('concil-prov-tbody');
+  tbodyP.innerHTML = PAGOS_PROV.map(p => {
+    const saldo = p.monto - p.pagado;
+    const estatus = saldo === 0 ? 'Pagado' : saldo === p.monto ? 'Pendiente' : 'Parcial';
+    const badge = estatus==='Pagado' ? 'badge-green' : estatus==='Pendiente' ? 'badge-red' : 'badge-amber';
+    return `<tr>
+      <td class="mono" style="font-size:11px">${p.fecha}</td>
+      <td class="bold">${p.producto}</td>
+      <td class="mono" style="font-size:11px">${p.factura}</td>
+      <td class="mono" style="text-align:right">$${p.monto.toLocaleString('es-MX')}</td>
+      <td class="mono" style="text-align:right">$${p.pagado.toLocaleString('es-MX')}</td>
+      <td class="mono bold" style="text-align:right;color:${saldo>0?'var(--red)':'var(--green)'}">$${saldo.toLocaleString('es-MX')}</td>
+      <td><span class="badge ${badge}">${estatus}</span></td>
+    </tr>`;
+  }).join('');
+
+  // Clientes (Dragon Foods) — from hist data
+  const tbodyC = document.getElementById('concil-cli-tbody');
+  tbodyC.innerHTML = HIST_DATA.map(h => {
+    const venta = h.jit_cajCli*428 + h.jit_kgCli*28 + h.lech_cajCli*730 + h.lech_kgCli*11;
+    return `<tr>
+      <td class="bold">${h.tienda}</td>
+      <td class="mono" style="text-align:right">${h.jit_cajCli}</td>
+      <td class="mono" style="text-align:right">${h.lech_cajCli}</td>
+      <td class="mono" style="text-align:right">${h.cb_cajCli}</td>
+      <td class="mono" style="text-align:right">${h.cm_cajCli}</td>
+      <td class="mono bold" style="text-align:right">$${venta.toLocaleString('es-MX')}</td>
+      <td><span class="badge badge-amber">⏳ Pendiente</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// HISTORIAL
+// ============================================================
+async function renderHistorial() {
+  const el = document.getElementById('historial-table');
+  if (!currentUser) return;
+  const prodFilter = document.getElementById('hist-prod').value;
+  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
+
+  let query = sb
+    .from('pedidos')
+    .select('id, fecha, estatus, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
+    .order('creado_en', { ascending: false })
+    .limit(5);
+
+  if (currentUser.rol === 'sucursal' && currentUser.tiendaId) {
+    query = query.eq('sucursal_id', currentUser.tiendaId);
+  }
+
+  const { data, error } = await query;
+  if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando historial</div></div>'; return; }
+
+  let rows = data || [];
+  if (prodFilter) {
+    rows = rows.filter(r => (r.pedido_detalle || []).some(d => d.producto_id === prodFilter && d.cant_solicitada > 0));
+  }
+
+  if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Sin pedidos para los filtros seleccionados</div></div>'; return; }
+
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fecha</th><th>Tienda</th><th>Estatus</th><th>Productos</th><th>Total</th></tr></thead>
+        <tbody>${rows.map(r => {
+          const est = ESTADOS_PEDIDO[r.estatus] || ESTADOS_PEDIDO.capturado;
+          let detalle = (r.pedido_detalle || []).filter(d => d.cant_solicitada > 0);
+          if (prodFilter) detalle = detalle.filter(d => d.producto_id === prodFilter);
+          const total = detalle.reduce((s,d) => s + (d.cant_solicitada * d.precio_unitario), 0);
+          const listado = detalle.map(d => {
+            const p = PRODUCTS.find(x => x.id === d.producto_id);
+            return p ? `${p.icon} ${d.cant_solicitada} ${p.unit}` : '';
+          }).join(', ');
+          return `<tr>
+            <td class="mono" style="font-size:11px">${r.fecha}</td>
+            <td class="bold">${r.sucursales?.nombre || '—'}</td>
+            <td><span class="badge ${est.cls}">${est.label}</span></td>
+            <td style="font-size:12px">${listado || '—'}</td>
+            <td class="mono bold" style="color:var(--green)">$${total.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// ============================================================
+// REPORTES
+// ============================================================
+function renderTopTiendas() {
+  const tbody = document.getElementById('top-tiendas-tbody');
+  const sorted = [...HIST_DATA].sort((a,b) => b.jit_cajCli - a.jit_cajCli);
+  tbody.innerHTML = sorted.map((h,i) => {
+    const venta = h.jit_cajCli*428 + h.jit_kgCli*28;
+    const t = TIENDAS.find(x => x.name === h.tienda);
+    return `<tr>
+      <td style="color:var(--gray-500);font-weight:600;font-size:12px">${i+1}</td>
+      <td class="bold">${h.tienda}</td>
+      <td class="mono" style="text-align:right">${h.jit_cajProv}</td>
+      <td class="mono" style="text-align:right">${h.jit_cajCli}</td>
+      <td class="mono" style="text-align:right">${h.jit_kgProv}</td>
+      <td class="mono" style="text-align:right">${h.jit_kgCli}</td>
+      <td class="mono bold" style="text-align:right;color:var(--green)">$${venta.toLocaleString('es-MX')}</td>
+      <td>${t?`<span class="badge badge-${t.ruta==='A'?'blue':t.ruta==='B'?'green':'amber'}">${RUTAS[t.ruta].name}</span>`:'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderReporteTiendas() {
+  const el = document.getElementById('reporte-tiendas-chart');
+  const max = Math.max(...HIST_DATA.map(h => h.jit_cajCli*428 + h.jit_kgCli*28));
+  el.innerHTML = `
+    <div class="bar-chart">
+      ${HIST_DATA.map(h => {
+        const v = h.jit_cajCli*428 + h.jit_kgCli*28;
+        const pct = Math.round((v/max)*90)+10;
+        const top = v === max;
+        return `<div class="bar-col">
+          <div class="bar${top?' top':''}" style="height:${pct}px" title="${h.tienda}: $${v.toLocaleString('es-MX')}"></div>
+          <div class="bar-label">${h.tienda.substring(0,4)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--gray-500);text-align:center;margin-top:6px">Venta estimada jitomate por tienda (1-May)</div>`;
+}
+
+// ============================================================
+// SUPABASE INTEGRATION — Velox Tech / Fresh Orden Etapa 1
+// ============================================================
+// PEGA AQUÍ tus credenciales (Project Settings → API en Supabase)
+const SUPABASE_URL = 'https://efqljuiezadbtvsxmkne.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_FERywjiVDoG25igyQNcWLw_MCdZ6Mpb';
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── CATÁLOGOS: sucursales y productos vienen de la BD, no del código ──
+async function loadCatalogos() {
+  const { data: sucursales, error: errSuc } = await sb
+    .from('sucursales')
+    .select('id, nombre, ruta, dias_entrega, tier_precio_default')
+    .eq('activo', true);
+
+  if (errSuc) { showToast('⚠️ Error cargando sucursales: ' + errSuc.message); return false; }
+
+  TIENDAS = sucursales.map(s => ({
+    id: s.id, name: s.nombre, ruta: s.ruta || 'A', diasEntrega: s.dias_entrega || '', vol: 'alto'
+  }));
+
+  const { data: productos, error: errProd } = await sb
+    .from('productos')
+    .select('*')
+    .eq('activo', true);
+
+  if (errProd) { showToast('⚠️ Error cargando productos: ' + errProd.message); return false; }
+
+  // Tier de precio cliente: usa el de la sucursal del usuario si aplica, si no 'b'
+  const tier = (currentUser?.tier || 'b').toLowerCase();
+  PRODUCTS = productos.map(p => ({
+    id: p.id,
+    name: p.nombre,
+    icon: p.icono,
+    unit: p.unidad_venta,
+    pCli: p[`precio_${tier}`],
+  }));
+
+  return true;
+}
+
+// ── Calcula el día de entrega: el primer día de reparto de la sucursal
+// que sea POSTERIOR a la fecha de surtido. Se usará cuando exista el
+// módulo "Bodega surte pedido" — aquí ya queda lista la función.
+const DIAS_SEMANA = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+function calcularDiaEntrega(diasEntregaStr, fechaSurtidoISO) {
+  if (!diasEntregaStr) return null;
+  const diasTexto = diasEntregaStr.toLowerCase();
+  const diasIdx = DIAS_SEMANA
+    .map((d, i) => diasTexto.includes(d) ? i : -1)
+    .filter(i => i >= 0);
+  if (!diasIdx.length) return null;
+
+  const base = new Date(fechaSurtidoISO + 'T00:00:00');
+  for (let add = 1; add <= 14; add++) {
+    const candidate = new Date(base);
+    candidate.setDate(base.getDate() + add);
+    if (diasIdx.includes(candidate.getDay())) {
+      return candidate.toISOString().split('T')[0];
+    }
+  }
+  return null;
+}
+
+// ── Pedido de HOY para la sucursal en sesión: si existe y sigue
+// 'capturado' se carga para edición; si ya fue surtido, se bloquea
+// la captura de un nuevo pedido para el mismo día. ──
+let pedidoHoyId = null;
+
+async function cargarPedidoHoy() {
+  if (!currentUser || currentUser.rol !== 'sucursal' || !currentUser.tiendaId) return;
+
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await sb
+    .from('pedidos')
+    .select('id, estatus, dia_entrega, pedido_detalle(producto_id, cant_solicitada)')
+    .eq('sucursal_id', currentUser.tiendaId)
+    .eq('fecha', today)
+    .maybeSingle();
+
+  const msgEl = document.getElementById('ped-locked-msg');
+  const btn = document.getElementById('btn-guardar-pedido');
+  const est = document.getElementById('ped-estatus-display');
+  const diaEntregaEl = document.getElementById('ped-diaentrega');
+
+  clearPedido();
+  msgEl.innerHTML = '';
+  btn.disabled = false;
+  document.querySelectorAll('.pedido-input').forEach(i => i.disabled = false);
+
+  if (error || !data) {
+    pedidoHoyId = null;
+    est.value = 'Sin pedido hoy';
+    diaEntregaEl.value = '';
+    return;
+  }
+
+  pedidoHoyId = data.id;
+  est.value = (ESTADOS_PEDIDO[data.estatus] || ESTADOS_PEDIDO.capturado).label;
+  diaEntregaEl.value = data.dia_entrega || '';
+
+  (data.pedido_detalle || []).forEach(d => {
+    const input = document.querySelector(`input[data-prod="${d.producto_id}"]`);
+    if (input) input.value = d.cant_solicitada || '';
+  });
+  updateSubtotales();
+
+  if (data.estatus !== 'capturado') {
+    msgEl.innerHTML = `<div class="alert alert-info" style="margin-bottom:12px">ℹ️ Tu pedido de hoy ya fue ${(ESTADOS_PEDIDO[data.estatus]||{}).label?.toLowerCase() || 'procesado'}. No se puede modificar — el siguiente pedido se captura al día siguiente.</div>`;
+    btn.disabled = true;
+    document.querySelectorAll('.pedido-input').forEach(i => i.disabled = true);
+  }
+}
+
+// ── PEDIDOS: guardar en Supabase (pedidos + pedido_detalle reales) ──
+async function savePedido() {
+  if (!currentUser?.tiendaId) { showToast('⚠️ Tu usuario no tiene sucursal asignada'); return; }
+
+  const today = new Date().toISOString().split('T')[0];
+  const lineas = PRODUCTS.map(p => ({
+    producto_id: p.id,
+    cant_solicitada: Math.round(+getInput(p.id) || 0),
+    tier_aplicado: (currentUser?.tier || 'b').toUpperCase(),
+    precio_unitario: p.pCli,
+  })).filter(l => l.cant_solicitada > 0);
+
+  if (!lineas.length) { alert('Ingresa al menos una cantidad'); return; }
+
+  const btn = document.getElementById('btn-guardar-pedido');
+  btn.textContent = 'Guardando...'; btn.disabled = true;
+
+  let pedidoId = pedidoHoyId;
+
+  if (!pedidoId) {
+    // No existe pedido hoy: se crea uno nuevo
+    const { data: pedido, error: errPedido } = await sb
+      .from('pedidos')
+      .insert({ sucursal_id: currentUser.tiendaId, fecha: today, creado_por: currentUser.id, estatus: 'capturado' })
+      .select()
+      .single();
+
+    if (errPedido) {
+      btn.textContent = 'Guardar pedido'; btn.disabled = false;
+      showToast('⚠️ Error al guardar pedido: ' + errPedido.message);
+      return;
+    }
+    pedidoId = pedido.id;
+  } else {
+    // Ya existe pedido hoy (capturado): se reemplaza su detalle
+    await sb.from('pedido_detalle').delete().eq('pedido_id', pedidoId);
+  }
+
+  const detalle = lineas.map(l => ({ ...l, pedido_id: pedidoId }));
+  const { error: errDetalle } = await sb.from('pedido_detalle').insert(detalle);
+
+  btn.textContent = 'Guardar pedido'; btn.disabled = false;
+
+  if (errDetalle) {
+    showToast('⚠️ Pedido creado, pero falló el detalle: ' + errDetalle.message);
+    return;
+  }
+
+  pedidoHoyId = pedidoId;
+
+  let receiptHtml = '';
+  lineas.forEach(l => {
+    const p = PRODUCTS.find(x => x.id === l.producto_id);
+    const venta = l.cant_solicitada * l.precio_unitario;
+    receiptHtml += `<div class="receipt-line"><span>${p.icon} ${p.name}</span><span class="mono">${l.cant_solicitada} ${p.unit} → $${venta.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>`;
+  });
+  document.getElementById('receipt-content').innerHTML = receiptHtml;
+  showModal('modal-pedido-ok');
+  showToast('✅ Pedido guardado en Supabase');
+  await cargarPedidosDelDia();
+}
+
+// ── Cargar pedidos del día (RLS filtra automático según el rol) ──
+async function cargarPedidosDelDia() {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await sb
+    .from('pedidos')
+    .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
+    .eq('fecha', today)
+    .order('creado_en', { ascending: false });
+
+  if (error) { showToast('⚠️ Error cargando pedidos: ' + error.message); return; }
+
+  pedidos = (data || []).map(row => {
+    const prods = {};
+    (row.pedido_detalle || []).forEach(d => {
+      prods[d.producto_id] = { cantSolicitada: d.cant_solicitada, cantSurtida: d.cant_surtida };
+    });
+    return {
+      id: row.id, fecha: row.fecha, tiendaId: row.sucursal_id,
+      tiendaNombre: row.sucursales?.nombre || '—',
+      estatus: row.estatus, prods
+    };
+  });
+
+  updatePedidoBadge();
+  renderDashboardPedidos();
+  renderPedidosDelDia();
+}
+
+// ── SESIÓN / LOGIN vía Supabase Auth + tabla `perfiles` ──
+async function cargarPerfilYArrancar(authUser) {
+  const { data: perfil, error } = await sb
+    .from('perfiles')
+    .select('id, nombre_completo, rol, sucursal_id')
+    .eq('id', authUser.id)
+    .single();
+
+  if (error || !perfil) {
+    document.getElementById('login-error').textContent =
+      'Tu usuario no tiene un perfil asignado. Contacta al administrador.';
+    await sb.auth.signOut();
+    return;
+  }
+
+  let tier = 'b';
+  if (perfil.sucursal_id) {
+    const { data: suc } = await sb.from('sucursales')
+      .select('tier_precio_default').eq('id', perfil.sucursal_id).single();
+    if (suc?.tier_precio_default) tier = suc.tier_precio_default.toLowerCase();
+  }
+
+  currentUser = {
+    id: perfil.id,
+    usuario: perfil.nombre_completo,
+    rol: perfil.rol,
+    tiendaId: perfil.sucursal_id,
+    tier
+  };
+
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('app-root').style.display = 'flex';
+
+  await loadCatalogos();
+  init();
+  applyRoleUI();
+  await cargarPedidosDelDia();
+  await cargarPedidoHoy();
+  await renderHistorial();
+}
+
+async function checkSession() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user) {
+    await cargarPerfilYArrancar(session.user);
+    return true;
+  }
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('app-root').style.display = 'none';
+  return false;
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+
+  const btn = document.querySelector('.login-btn');
+  if (btn) { btn.textContent = 'Ingresando...'; btn.disabled = true; }
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+
+  if (btn) { btn.textContent = 'Ingresar'; btn.disabled = false; }
+
+  if (error) { err.textContent = 'Correo o contraseña incorrectos'; return; }
+  await cargarPerfilYArrancar(data.user);
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  currentUser = null;
+  location.reload();
+}
+
+// ── TOAST NOTIFICATION ──
+function showToast(msg) {
+  let toast = document.getElementById('velox-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'velox-toast';
+    toast.style.cssText = `
+      position:fixed;bottom:24px;right:24px;z-index:9999;
+      background:#1a1a1a;color:#fff;
+      padding:12px 20px;border-radius:8px;
+      font-size:13px;font-family:var(--font);
+      border:1px solid rgba(255,255,255,0.1);
+      box-shadow:0 4px 20px rgba(0,0,0,0.3);
+      transition:opacity 0.3s;
+      max-width:320px;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+}
+
+// ============================================================
+// START
+// ============================================================
+checkSession();
+document.getElementById('login-pass')?.addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+
+</script>
+</body>
+</html>
