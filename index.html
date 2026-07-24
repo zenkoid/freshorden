@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.6.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.6.2</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -1326,6 +1326,19 @@ const PAGOS_PROV = [
 
 // App state
 let pedidos = [];
+
+// ── Fechas de negocio: SIEMPRE en huso horario de Ciudad de México,
+// sin importar en qué zona horaria esté el dispositivo de quien usa la app.
+// (new Date().toISOString() usa UTC, lo cual rompe el cálculo de "hoy"
+// entre las 6pm y medianoche hora CDMX — este es el fix.)
+const FMT_FECHA_MX = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' });
+function fechaNegocioHoy() {
+  return FMT_FECHA_MX.format(new Date()); // en-CA formatea como YYYY-MM-DD
+}
+function fmtFechaLocal(d) {
+  // Formatea un objeto Date ya construido en local (no reconvierte a UTC)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 let recepciones = [];
 let lastPedido = null;
 
@@ -1334,7 +1347,7 @@ let lastPedido = null;
 // ============================================================
 function init() {
   // Set dates
-  const today = new Date().toISOString().split('T')[0];
+  const today = fechaNegocioHoy();
   document.getElementById('rec-fecha').value = today;
   const histFechaInput = document.getElementById('hist-fecha');
   if (histFechaInput) histFechaInput.value = today;
@@ -1492,7 +1505,7 @@ function clearPedido() {
 }
 
 function updatePedidoBadge() {
-  const t = pedidos.filter(p => p.fecha === new Date().toISOString().split('T')[0]).length;
+  const t = pedidos.filter(p => p.fecha === fechaNegocioHoy()).length;
   const b = document.getElementById('badge-pedidos');
   if (t > 0) { b.textContent = t; b.style.display=''; }
   else b.style.display='none';
@@ -1617,29 +1630,48 @@ function renderResumenSalidas() {
 // ============================================================
 let pedidoASurtir = null;
 
-function renderSurtirPedidos() {
+async function renderSurtirPedidos() {
   const el = document.getElementById('surtir-pedidos-table');
   if (!el || !currentUser) return;
   if (!['bodega','admin','gerencia'].includes(currentUser.rol)) { el.innerHTML = ''; return; }
-  const pendientes = pedidos.filter(p => p.estatus === 'capturado');
+
+  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
+
+  // OJO: esta consulta es independiente de "hoy" a propósito — un pedido
+  // capturado no debe desaparecer de la cola de Bodega solo porque cambió
+  // el día; solo sale de aquí cuando de verdad se marca como surtido.
+  const { data, error } = await sb
+    .from('pedidos')
+    .select('id, fecha, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada)')
+    .eq('estatus', 'capturado')
+    .order('fecha', { ascending: true });
+
+  if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando pedidos pendientes</div></div>'; return; }
+
+  const pendientes = data || [];
   if (!pendientes.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-msg">No hay pedidos pendientes de surtir hoy</div></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-msg">No hay pedidos pendientes de surtir</div></div>';
     return;
   }
+
+  const hoy = fechaNegocioHoy();
   el.innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Tienda</th>${PRODUCTS.map(p=>`<th>${p.icon} ${p.name}</th>`).join('')}<th>Estatus</th><th></th></tr></thead>
-        <tbody>${pendientes.map(p => `
+        <thead><tr><th>Tienda</th><th>Fecha</th>${PRODUCTS.map(p=>`<th>${p.icon} ${p.name}</th>`).join('')}<th>Estatus</th><th></th></tr></thead>
+        <tbody>${pendientes.map(p => {
+          const atrasado = p.fecha < hoy;
+          const cantidades = {};
+          (p.pedido_detalle || []).forEach(d => { cantidades[d.producto_id] = d.cant_solicitada; });
+          return `
           <tr>
-            <td class="bold">${p.tiendaNombre}</td>
-            ${PRODUCTS.map(prod => {
-              const d = p.prods[prod.id];
-              return `<td class="mono">${d ? d.cantSolicitada : 0} ${prod.unit}</td>`;
-            }).join('')}
+            <td class="bold">${p.sucursales?.nombre || '—'}</td>
+            <td class="mono" style="${atrasado ? 'color:var(--red);font-weight:600' : ''}">${p.fecha}${atrasado ? ' ⚠️' : ''}</td>
+            ${PRODUCTS.map(prod => `<td class="mono">${cantidades[prod.id] || 0} ${prod.unit}</td>`).join('')}
             <td><span class="badge badge-blue">Capturado</span></td>
             <td><button class="topbar-btn primary" onclick="abrirSurtido('${p.id}')">Surtir</button></td>
-          </tr>`).join('')}
+          </tr>`;
+        }).join('')}
         </tbody>
       </table>
     </div>`;
@@ -1752,7 +1784,7 @@ async function confirmarSurtido() {
       .eq('producto_id', act.producto_id);
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = fechaNegocioHoy();
   const diaEntrega = calcularDiaEntrega(pedidoASurtir.diasEntrega, today);
 
   const { error } = await sb.from('pedidos')
@@ -2049,7 +2081,7 @@ async function renderHistorial() {
     const hoy = new Date();
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth() - offsetMeses, 1);
     const finMes = new Date(hoy.getFullYear(), hoy.getMonth() - offsetMeses + 1, 0);
-    const fmt = d => d.toISOString().split('T')[0];
+    const fmt = d => fmtFechaLocal(d);
     query = query.gte('fecha', fmt(inicioMes)).lte('fecha', fmt(finMes));
   } else {
     if (tiendaFilter) query = query.eq('sucursal_id', tiendaFilter);
@@ -2200,7 +2232,7 @@ function calcularDiaEntrega(diasEntregaStr, fechaSurtidoISO) {
     const candidate = new Date(base);
     candidate.setDate(base.getDate() + add);
     if (diasIdx.includes(candidate.getDay())) {
-      return candidate.toISOString().split('T')[0];
+      return fmtFechaLocal(candidate);
     }
   }
   return null;
@@ -2214,7 +2246,7 @@ let pedidoHoyId = null;
 async function cargarPedidoHoy() {
   if (!currentUser || currentUser.rol !== 'sucursal' || !currentUser.tiendaId) return;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = fechaNegocioHoy();
   const { data, error } = await sb
     .from('pedidos')
     .select('id, estatus, dia_entrega, surtido_diferente, notas_surtido, pedido_detalle(producto_id, cant_solicitada, cant_surtida)')
@@ -2314,7 +2346,7 @@ async function confirmarRecepcion(pedidoId) {
 async function savePedido() {
   if (!currentUser?.tiendaId) { showToast('⚠️ Tu usuario no tiene sucursal asignada'); return; }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = fechaNegocioHoy();
   const lineas = PRODUCTS.map(p => ({
     producto_id: p.id,
     cant_solicitada: Math.round(+getInput(p.id) || 0),
@@ -2405,7 +2437,7 @@ async function savePedido() {
 
 // ── Cargar pedidos del día (RLS filtra automático según el rol) ──
 async function cargarPedidosDelDia() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = fechaNegocioHoy();
   const { data, error } = await sb
     .from('pedidos')
     .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
