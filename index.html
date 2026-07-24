@@ -41,7 +41,7 @@ h1,h2,h3{letter-spacing:-0.02em;font-weight:700}
 header{ position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92); backdrop-filter:blur(8px); border-bottom:1px solid var(--gray-100); }
 .nav-inner{ display:flex; align-items:center; gap:20px; padding:14px 24px; max-width:1120px; margin:0 auto; }
 .brand{ display:flex; align-items:center; gap:10px; }
-.brand img{ height:52px; width:auto; }
+.brand img{ height:60px; width:auto; }
 .nav-links{ display:flex; gap:28px; margin-left:auto; font-size:14px; font-weight:500; color:var(--gray-700); }
 .nav-links a:hover{ color:var(--green); }
 @media (max-width:720px){ .nav-links{ display:none; } }
@@ -279,7 +279,13 @@ footer{ border-top:1px solid var(--gray-100); padding:36px 0; }
 // ============================================================
 const SUPABASE_URL = 'https://efqljuiezadbtvsxmkne.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FERywjiVDoG25igyQNcWLw_MCdZ6Mpb';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: false,   // la Landing nunca debe usar/guardar sesión: siempre inserta como visitante (anon)
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  }
+});
 
 const form = document.getElementById('lead-form');
 const msgEl = document.getElementById('lead-msg');
