@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.7.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.7.1</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -1745,10 +1745,11 @@ async function abrirSurtido(pedidoId) {
     showToast('⚠️ No tienes permiso para surtir pedidos');
     return;
   }
-  const ped = pedidos.find(p => p.id === pedidoId);
-  if (!ped) return;
-
-  // Trae el detalle fresco de Supabase, incluyendo días de entrega de la sucursal
+  // OJO: "pedidos" (el arreglo global) solo contiene los pedidos de HOY —
+  // por eso NO se usa aquí como filtro/guardia. Un pedido atrasado (⚠️,
+  // capturado en un día anterior) sigue siendo válido para surtir cualquier
+  // día mientras no esté marcado como "surtido"; se valida y se trae
+  // directo de Supabase, sin importar su fecha.
   const { data, error } = await sb
     .from('pedidos')
     .select('id, sucursal_id, sucursales(nombre, dias_entrega), pedido_detalle(producto_id, cant_solicitada, cant_surtida)')
@@ -1759,7 +1760,7 @@ async function abrirSurtido(pedidoId) {
 
   pedidoASurtir = { id: data.id, sucursalId: data.sucursal_id, diasEntrega: data.sucursales?.dias_entrega || '' };
 
-  document.getElementById('surtir-tienda-nombre').textContent = data.sucursales?.nombre || ped.tiendaNombre;
+  document.getElementById('surtir-tienda-nombre').textContent = data.sucursales?.nombre || 'la tienda';
   document.getElementById('surtir-notas').value = '';
 
   const tbody = document.getElementById('surtir-detalle-body');
