@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.7.1</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.8.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -621,6 +621,8 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
             <div class="card-title">Datos del pedido</div>
           </div>
           <div class="card-body">
+            <div id="ped-por-confirmar"></div>
+            <div id="ped-horario-msg"></div>
             <div id="ped-locked-msg"></div>
             <div class="form-row">
               <div class="form-group">
@@ -1254,8 +1256,51 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 // ============================================================
 // PRODUCTS y TIENDAS ya NO se hardcodean: se cargan desde Supabase
 // (tablas `productos` y `sucursales`) en loadCatalogos(), más abajo.
-let PRODUCTS = [];
+let PRODUCTS = [];      // solo activos — para capturar y armar columnas
+let PRODUCTS_ALL = [];  // incluye dados de baja — para resolver un producto_id ya existente
 let TIENDAS = [];
+
+// ============================================================
+// REGLAS DE CANTIDAD (Ajuste 1)
+// ============================================================
+// La app arrastraba el supuesto de que "la cantidad de un pedido" es
+// un solo número. Son dos —solicitada y surtida— y cuál manda depende
+// del estatus. Cada pantalla lo resolvía por su cuenta; aquí queda
+// centralizado para que no vuelva a divergir.
+
+const ESTATUS_YA_SURTIDO = ['surtido','confirmado','prefacturado','facturado'];
+
+// ⚠️ NO usar `cant_surtida || cant_solicitada`.
+// cant_surtida es NOT NULL DEFAULT 0, así que un surtido legítimo de
+// CERO (no llegó de la Central) se leería como "todavía no surtido" y
+// mostraría lo solicitado — ocultando justo el faltante que la sucursal
+// necesita ver antes de confirmar. La regla va contra el ESTATUS.
+function cantidadVigente(estatus, solicitada, surtida) {
+  return ESTATUS_YA_SURTIDO.includes(estatus) ? (+surtida || 0) : (+solicitada || 0);
+}
+
+// Celda de tabla: cantidad vigente, en ámbar si difiere de lo solicitado.
+function celdaCantidad(estatus, solicitada, surtida, unidad) {
+  const vigente = cantidadVigente(estatus, solicitada, surtida);
+  const dif = ESTATUS_YA_SURTIDO.includes(estatus) && (+surtida || 0) !== (+solicitada || 0);
+  return dif
+    ? `<span style="color:var(--amber);font-weight:600" title="Solicitado: ${+solicitada || 0} ${unidad}">${vigente} ${unidad} ⚠</span>`
+    : `${vigente} ${unidad}`;
+}
+
+// ── Cantidades decimales ──
+// Cebolla blanca, morada y sal se venden por kg. Las cajas siguen enteras.
+const UNIDADES_DECIMALES = ['kg'];
+
+function esUnidadDecimal(unidad) {
+  return UNIDADES_DECIMALES.includes((unidad || '').toLowerCase());
+}
+
+function normalizaCantidad(valor, unidad) {
+  const n = +valor || 0;
+  if (n < 0) return 0;
+  return esUnidadDecimal(unidad) ? Math.round(n * 100) / 100 : Math.round(n);
+}
 
 const RUTAS = {
   A: { name:'Ruta A', dias:'Lunes y Jueves', color:'#2563a8' },
@@ -1400,6 +1445,28 @@ function fmtFechaLocal(d) {
   // Formatea un objeto Date ya construido en local (no reconvierte a UTC)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+
+// ── Ventana de captura de pedidos (Ajuste 5) ──
+// El horario real vive en sucursales.horario_pedido_inicio/fin y lo valida
+// un trigger en la base. Esto es solo UX: el reloj del dispositivo es
+// manipulable y por sí solo no sirve como control.
+// Aplica los 7 días por igual — domingo incluido.
+let HORARIO_PEDIDO = { inicio: '08:00', fin: '16:00' };
+let horarioBloqueadoPrev = null;
+
+const FMT_HORA_MX = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: false
+});
+function horaNegocioAhora() {
+  return FMT_HORA_MX.format(new Date()); // 'HH:MM'
+}
+
+// Comparación lexicográfica de 'HH:MM' — válida por el zero-padding.
+// Ventana cerrada por la derecha: 15:59 pasa, 16:00 ya no.
+function dentroDeHorario() {
+  const ahora = horaNegocioAhora();
+  return ahora >= HORARIO_PEDIDO.inicio && ahora < HORARIO_PEDIDO.fin;
+}
 let recepciones = [];
 let lastPedido = null;
 
@@ -1472,7 +1539,7 @@ function buildPedidoRows() {
       <td style="padding:6px 4px 6px 8px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.name}">${p.icon} ${nombreCorto}</td>
       <td class="mono" style="padding:6px 4px;text-align:left;white-space:nowrap;font-size:12px">$${(+p.pCli).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}/${p.unit}</td>
       <td style="padding:4px 2px;text-align:center">
-        <input type="number" class="pedido-input" data-prod="${p.id}" placeholder="0" min="0" max="999" step="1" style="width:3em;text-align:center;padding:4px 2px">
+        <input type="number" class="pedido-input" data-prod="${p.id}" data-unidad="${p.unit}" placeholder="0" min="0" max="999" step="${esUnidadDecimal(p.unit) ? '0.01' : '1'}" style="width:4.5em;text-align:center;padding:4px 2px">
       </td>
       <td class="mono" style="padding:6px 8px 6px 4px;text-align:right" id="subtotal-${p.id}">$0.00</td>
     `;
@@ -1541,7 +1608,7 @@ function switchTab(tabId, group, btn) {
     if(parentTabs) parentTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
   }
-  if(tabId==='tab-nuevopedido') cargarPedidoHoy();
+  if(tabId==='tab-nuevopedido') { cargarPedidoHoy(); cargarPendientesConfirmacion(); }
   if(tabId==='tab-surtir') renderSurtirPedidos();
   if(tabId==='tab-pedidosdel') { renderPedidosDelDia(); renderResumenSalidas(); }
   if(tabId==='tab-historial') renderHistorial();
@@ -1663,7 +1730,7 @@ function renderPedidosDelDia() {
             <td class="bold">${p.tiendaNombre}</td>
             ${PRODUCTS.map(prod => {
               const d = p.prods[prod.id];
-              return `<td class="mono">${d ? d.cantSolicitada : 0} ${prod.unit}</td>`;
+              return `<td class="mono">${celdaCantidad(p.estatus, d?.cantSolicitada, d?.cantSurtida, prod.unit)}</td>`;
             }).join('')}
             <td><span class="badge ${est.cls}">${est.label}</span></td>
           </tr>`;
@@ -1678,7 +1745,8 @@ function renderResumenSalidas() {
   if (!el) return;
   if (!pedidos.length) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Sin datos</div></div>'; return; }
   el.innerHTML = PRODUCTS.map(p => {
-    const totalCant = pedidos.reduce((sum, ped) => sum + (ped.prods[p.id]?.cantSolicitada || 0), 0);
+    const totalCant = pedidos.reduce((sum, ped) =>
+      sum + cantidadVigente(ped.estatus, ped.prods[p.id]?.cantSolicitada, ped.prods[p.id]?.cantSurtida), 0);
     const venta = totalCant * p.pCli;
     return `<div class="summary-row">
       <div class="summary-label">${p.icon} ${p.name}</div>
@@ -1767,7 +1835,7 @@ async function abrirSurtido(pedidoId) {
   tbody.innerHTML = (data.pedido_detalle || [])
     .filter(d => d.cant_solicitada > 0)
     .map(d => {
-      const prod = PRODUCTS.find(x => x.id === d.producto_id);
+      const prod = PRODUCTS_ALL.find(x => x.id === d.producto_id);
       if (!prod) return '';
       const valorInicial = d.cant_surtida ?? d.cant_solicitada;
       return `<tr>
@@ -1775,8 +1843,9 @@ async function abrirSurtido(pedidoId) {
         <td class="mono" style="text-align:right">${d.cant_solicitada} ${prod.unit}</td>
         <td style="text-align:center">
           <input type="number" class="form-input surtir-input" data-prod="${d.producto_id}" data-solicitado="${d.cant_solicitada}"
-                 value="${valorInicial}" min="0" step="1" oninput="checkSurtirNotas()"
-                 style="width:70px;text-align:center;font-family:var(--mono)">
+                 data-unidad="${prod.unit}"
+                 value="${valorInicial}" min="0" step="${esUnidadDecimal(prod.unit) ? '0.01' : '1'}" oninput="checkSurtirNotas()"
+                 style="width:84px;text-align:center;font-family:var(--mono)">
         </td>
       </tr>`;
     }).join('');
@@ -1789,7 +1858,8 @@ async function abrirSurtido(pedidoId) {
 // avance hacia el mínimo de 35 caracteres exigido quando existen diferencias.
 function haySurtidoDiferente() {
   const inputs = document.querySelectorAll('#surtir-detalle-body .surtir-input');
-  return Array.from(inputs).some(i => (Math.round(+i.value) || 0) !== (+i.dataset.solicitado || 0));
+  return Array.from(inputs).some(i =>
+    Math.abs(normalizaCantidad(i.value, i.dataset.unidad) - (+i.dataset.solicitado || 0)) > 0.001);
 }
 
 function checkSurtirNotas() {
@@ -1838,7 +1908,7 @@ async function confirmarSurtido() {
   const inputs = document.querySelectorAll('#surtir-detalle-body .surtir-input');
   const actualizaciones = Array.from(inputs).map(i => ({
     producto_id: i.dataset.prod,
-    cant_surtida: Math.round(+i.value) || 0
+    cant_surtida: normalizaCantidad(i.value, i.dataset.unidad)
   }));
 
   for (const act of actualizaciones) {
@@ -1984,47 +2054,59 @@ async function renderPreFactura() {
   const tiendaFilter = tiendaFilterEl ? tiendaFilterEl.value : '';
   el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
 
+  // Ajuste 4: la factura ya NO espera a que la sucursal confirme.
+  // Un trigger en la base la crea en cuanto Bodega marca el pedido como
+  // surtido, con estatus 'pendiente' y los totales ya calculados desde
+  // importe_surtido. Esta pantalla lee esas facturas pendientes.
+  // El UNIQUE sobre facturas_cfdi.pedido_id impide la doble facturación.
   let query = sb
-    .from('pedidos')
-    .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
-    .eq('estatus', 'confirmado')
-    .order('fecha', { ascending: true });
+    .from('facturas_cfdi')
+    .select('id, subtotal, iva, total, estatus, creado_en, pedidos!inner(id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_surtida, precio_unitario, importe_surtido, unidad_aplicada))')
+    .eq('estatus', 'pendiente')
+    .order('creado_en', { ascending: true });
 
-  if (tiendaFilter) query = query.eq('sucursal_id', tiendaFilter);
+  if (tiendaFilter) query = query.eq('pedidos.sucursal_id', tiendaFilter);
 
   const { data, error } = await query;
-  if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando pedidos confirmados</div></div>'; return; }
+  if (error) { el.innerHTML = `<div class="empty-state"><div class="empty-msg">No se pudieron cargar las facturas pendientes: ${error.message}</div></div>`; return; }
 
   const rows = data || [];
   if (!rows.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🧾</div><div class="empty-msg">No hay pedidos confirmados pendientes de pre-facturar</div></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🧾</div><div class="empty-msg">No hay facturas pendientes de timbrar</div></div>';
     return;
   }
 
-  el.innerHTML = rows.map(ped => {
+  el.innerHTML = rows.map(f => {
+    const ped = f.pedidos;
     const detalle = (ped.pedido_detalle || []).filter(d => (d.cant_surtida ?? 0) > 0);
-    let total = 0;
+    const confirmado = ESTATUS_YA_SURTIDO.includes(ped.estatus) && ped.estatus !== 'surtido';
+
     const filas = detalle.map(d => {
-      const p = PRODUCTS.find(x => x.id === d.producto_id);
+      const p = PRODUCTS_ALL.find(x => x.id === d.producto_id);
       if (!p) return '';
       const cant = d.cant_surtida ?? 0;
-      const subtotal = cant * (d.precio_unitario || 0);
-      total += subtotal;
+      const unidad = d.unidad_aplicada || p.unit;
+      const subtotal = +d.importe_surtido || (cant * (d.precio_unitario || 0));
       return `<tr>
-        <td>${p.icon} ${p.name}</td>
-        <td class="mono" style="text-align:right">${cant} ${p.unit}</td>
+        <td>${p.icon} ${p.name}${p.ivaTasa ? ' <span class="badge badge-blue">IVA 16%</span>' : ''}</td>
+        <td class="mono" style="text-align:right">${cant} ${unidad}</td>
         <td class="mono" style="text-align:right">$${(d.precio_unitario||0).toFixed(2)}</td>
-        <td class="mono bold" style="text-align:right">$${subtotal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        <td class="mono bold" style="text-align:right">$${(+subtotal).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
       </tr>`;
-    }).join('');
-    const iva = total * 0.16;
+    }).filter(Boolean).join('');
+
+    // La sucursal que no confirma a tiempo ya no detiene la facturación,
+    // pero sí queda señalada para dar seguimiento a la aclaración.
+    const avisoConfirm = confirmado
+      ? '<span class="badge badge-green">Confirmada por la sucursal</span>'
+      : '<span class="badge badge-amber">Sin confirmar por la sucursal</span>';
 
     return `
     <div class="card" style="margin-bottom:16px;max-width:760px">
       <div class="card-header">
         <div>
           <div class="card-title">${ped.sucursales?.nombre || '—'} — ${ped.fecha}</div>
-          <div style="font-size:11px;color:var(--gray-500);margin-top:2px">Confirmado por la sucursal — pendiente de pre-facturar</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:4px">${avisoConfirm}</div>
         </div>
         <div style="margin-left:auto">
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gray-500)">
@@ -2041,9 +2123,9 @@ async function renderPreFactura() {
             </table>
           </div>
           <div style="margin-top:16px;padding:12px;background:var(--gray-50);border-radius:var(--radius-sm);max-width:280px;margin-left:auto">
-            <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">Subtotal</span><span class="mono">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
-            <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">IVA 16%</span><span class="mono">$${iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
-            <div class="receipt-total"><span>Total</span><span class="mono" style="color:var(--green)">$${(total+iva).toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+            <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">Subtotal</span><span class="mono">$${(+f.subtotal).toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+            <div class="receipt-line"><span style="font-size:12px;color:var(--gray-500)">IVA trasladado</span><span class="mono">$${(+f.iva).toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+            <div class="receipt-total"><span>Total</span><span class="mono" style="color:var(--green)">$${(+f.total).toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
           </div>
         </div>
       </div>
@@ -2130,7 +2212,7 @@ async function renderHistorial() {
 
   let query = sb
     .from('pedidos')
-    .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario)')
+    .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario, importe_solicitado, importe_surtido, unidad_aplicada)')
     .order('creado_en', { ascending: false });
 
   if (estatusFilter) query = query.eq('estatus', estatusFilter);
@@ -2174,11 +2256,17 @@ async function renderHistorial() {
           const est = ESTADOS_PEDIDO[r.estatus] || ESTADOS_PEDIDO.capturado;
           let detalle = (r.pedido_detalle || []).filter(d => d.cant_solicitada > 0);
           if (prodFilter) detalle = detalle.filter(d => d.producto_id === prodFilter);
-          const total = detalle.reduce((s,d) => s + (d.cant_solicitada * d.precio_unitario), 0);
+          // importe_solicitado e importe_surtido son GENERATED ALWAYS:
+          // Postgres las calcula solas y no pueden desincronizarse.
+          const yaSurtido = ESTATUS_YA_SURTIDO.includes(r.estatus);
+          const total = detalle.reduce((s,d) =>
+            s + (+(yaSurtido ? d.importe_surtido : d.importe_solicitado) || 0), 0);
           const listado = detalle.map(d => {
-            const p = PRODUCTS.find(x => x.id === d.producto_id);
-            return p ? `${p.icon} ${d.cant_solicitada} ${p.unit}` : '';
-          }).join(', ');
+            const p = PRODUCTS_ALL.find(x => x.id === d.producto_id);
+            if (!p) return '';
+            const unidad = d.unidad_aplicada || p.unit;
+            return `${p.icon} ${celdaCantidad(r.estatus, d.cant_solicitada, d.cant_surtida, unidad)}`;
+          }).filter(Boolean).join(', ');
           return `<tr>
             <td class="mono" style="font-size:11px">${r.fecha}</td>
             <td class="bold">${r.sucursales?.nombre || '—'}</td>
@@ -2259,22 +2347,27 @@ async function loadCatalogos() {
     id: s.id, name: s.nombre, ruta: s.ruta || 'A', diasEntrega: s.dias_entrega || '', vol: 'alto'
   }));
 
+  // Sin filtro de activo: los dados de baja se necesitan para resolver
+  // pedidos históricos. Si se filtraran aquí, esos renglones desaparecerían
+  // en silencio del Historial la primera vez que se descontinúe un producto.
   const { data: productos, error: errProd } = await sb
     .from('productos')
-    .select('*')
-    .eq('activo', true);
+    .select('*');
 
   if (errProd) { showToast('⚠️ Error cargando productos: ' + errProd.message); return false; }
 
   // Tier de precio cliente: usa el de la sucursal del usuario si aplica, si no 'b'
   const tier = (currentUser?.tier || 'b').toLowerCase();
-  PRODUCTS = productos.map(p => ({
+  PRODUCTS_ALL = productos.map(p => ({
     id: p.id,
     name: p.nombre,
     icon: p.icono,
     unit: p.unidad_venta,
     pCli: p[`precio_${tier}`],
+    ivaTasa: +p.iva_tasa || 0,
+    activo: p.activo,
   }));
+  PRODUCTS = PRODUCTS_ALL.filter(p => p.activo);
 
   return true;
 }
@@ -2345,47 +2438,107 @@ async function cargarPedidoHoy() {
   });
   updateSubtotales();
 
-  if (data.estatus === 'surtido') {
-    // Bodega ya surtió — la sucursal debe revisar y confirmar recepción antes de cerrar el pedido
-    const filas = (data.pedido_detalle || [])
-      .filter(d => d.cant_solicitada > 0 || d.cant_surtida > 0)
-      .map(d => {
-        const p = PRODUCTS.find(x => x.id === d.producto_id);
-        if (!p) return '';
-        const surtida = d.cant_surtida ?? 0;
-        const dif = surtida !== d.cant_solicitada;
-        return `<tr>
-          <td>${p.icon} ${p.name}</td>
-          <td class="mono" style="text-align:right">${d.cant_solicitada} ${p.unit}</td>
-          <td class="mono" style="text-align:right;${dif ? 'color:var(--amber);font-weight:600' : ''}">${surtida} ${p.unit}</td>
-        </tr>`;
-      }).join('');
-
-    const avisoDiferencia = data.surtido_diferente
-      ? `<div class="alert alert-warn" style="margin-bottom:12px">⚠️ Bodega registró un <b>surtido diferente a lo solicitado</b>. Motivo: "${data.notas_surtido || 'sin nota'}"</div>`
-      : '';
-
-    msgEl.innerHTML = `
-      <div class="alert alert-info" style="margin-bottom:12px">ℹ️ Tu pedido de hoy ya fue surtido por Bodega. Revisa las cantidades y confirma que lo recibiste conforme.</div>
-      ${avisoDiferencia}
-      <div class="table-wrap" style="margin-bottom:12px">
-        <table>
-          <thead><tr><th>Producto</th><th style="text-align:right">Solicitado</th><th style="text-align:right">Surtido</th></tr></thead>
-          <tbody>${filas}</tbody>
-        </table>
-      </div>
-      <button class="topbar-btn primary" style="width:100%" onclick="confirmarRecepcion('${data.id}')">✅ Confirmar recepción</button>
-    `;
-    btn.disabled = true;
-    document.querySelectorAll('.pedido-input').forEach(i => i.disabled = true);
-    return;
-  }
-
   if (data.estatus !== 'capturado') {
     msgEl.innerHTML = `<div class="alert alert-info" style="margin-bottom:12px">ℹ️ Tu pedido de hoy ya fue ${(ESTADOS_PEDIDO[data.estatus]||{}).label?.toLowerCase() || 'procesado'}. No se puede modificar — el siguiente pedido se captura al día siguiente.</div>`;
     btn.disabled = true;
     document.querySelectorAll('.pedido-input').forEach(i => i.disabled = true);
   }
+
+  aplicarBloqueoHorario();
+}
+
+// ============================================================
+// BANDEJA DE CONFIRMACIÓN (Ajuste 2)
+// ============================================================
+// Antes, el botón "Confirmar recepción" vivía dentro de cargarPedidoHoy(),
+// que consulta con .eq('fecha', today). Un pedido surtido en un día
+// anterior nunca se cargaba, así que el botón no llegaba a existir y la
+// sucursal quedaba sin forma de confirmarlo.
+// Esta bandeja consulta por ESTATUS, sin filtro de fecha.
+
+async function cargarPendientesConfirmacion() {
+  const cont = document.getElementById('ped-por-confirmar');
+  if (!cont) return;
+  if (currentUser?.rol !== 'sucursal' || !currentUser.tiendaId) { cont.innerHTML = ''; return; }
+
+  const { data, error } = await sb
+    .from('pedidos')
+    .select('id, fecha, estatus, surtido_diferente, notas_surtido, pedido_detalle(producto_id, cant_solicitada, cant_surtida, unidad_aplicada)')
+    .eq('sucursal_id', currentUser.tiendaId)
+    .eq('estatus', 'surtido')
+    .order('fecha', { ascending: true });
+
+  if (error || !data?.length) { cont.innerHTML = ''; return; }
+
+  const hoy = fechaNegocioHoy();
+
+  cont.innerHTML = data.map(ped => {
+    const atrasado = ped.fecha < hoy;
+    const filas = (ped.pedido_detalle || [])
+      .filter(d => d.cant_solicitada > 0 || d.cant_surtida > 0)
+      .map(d => {
+        const p = PRODUCTS_ALL.find(x => x.id === d.producto_id);
+        if (!p) return '';
+        const unidad = d.unidad_aplicada || p.unit;
+        const dif = (+d.cant_surtida || 0) !== (+d.cant_solicitada || 0);
+        return `<tr>
+          <td>${p.icon} ${p.name}</td>
+          <td class="mono" style="text-align:right">${d.cant_solicitada} ${unidad}</td>
+          <td class="mono" style="text-align:right;${dif ? 'color:var(--amber);font-weight:600' : ''}">${d.cant_surtida} ${unidad}</td>
+        </tr>`;
+      }).filter(Boolean).join('');
+
+    const avisoDiferencia = ped.surtido_diferente
+      ? `<div class="alert alert-warn" style="margin-bottom:12px">⚠️ Bodega registró un <b>surtido diferente a lo solicitado</b>. Motivo: "${ped.notas_surtido || 'sin nota'}"</div>`
+      : '';
+
+    return `
+      <div class="card" style="margin-bottom:16px;border-color:var(--amber)">
+        <div class="card-header">
+          <div class="card-title">Pedido del ${ped.fecha} — pendiente de confirmar</div>
+          ${atrasado ? '<span class="badge badge-red" style="margin-left:auto">Atrasado</span>' : ''}
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info" style="margin-bottom:12px">ℹ️ Bodega ya surtió este pedido. Revisa las cantidades y confirma que lo recibiste conforme.</div>
+          ${avisoDiferencia}
+          <div class="table-wrap" style="margin-bottom:12px">
+            <table>
+              <thead><tr><th>Producto</th><th style="text-align:right">Solicitado</th><th style="text-align:right">Surtido</th></tr></thead>
+              <tbody>${filas}</tbody>
+            </table>
+          </div>
+          <button class="topbar-btn primary" style="width:100%" onclick="confirmarRecepcion('${ped.id}')">✅ Confirmar recepción</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Bloqueo por ventana horaria (Ajuste 5) ──
+// Regla de oro: esta función NUNCA re-habilita nada por su cuenta.
+// cargarPedidoHoy() ya bloquea por estatus, y re-habilitar aquí pisaría
+// esos candados. Al reabrir la ventana se recarga el pedido completo.
+function aplicarBloqueoHorario() {
+  if (currentUser?.rol !== 'sucursal') return;
+
+  const aviso = document.getElementById('ped-horario-msg');
+  const btn   = document.getElementById('btn-guardar-pedido');
+  const bloqueado = !dentroDeHorario();
+
+  if (bloqueado) {
+    if (aviso) aviso.innerHTML =
+      `<div class="alert alert-warn" style="margin-bottom:12px">
+         🕐 Fuera del horario de captura. Los pedidos se registran de
+         <b>${HORARIO_PEDIDO.inicio} a ${HORARIO_PEDIDO.fin}</b> (hora del centro),
+         todos los días. Puedes consultar tu historial con normalidad.
+       </div>`;
+    if (btn) btn.disabled = true;
+    document.querySelectorAll('.pedido-input').forEach(i => i.disabled = true);
+  } else {
+    if (aviso) aviso.innerHTML = '';
+    if (horarioBloqueadoPrev === true) cargarPedidoHoy();
+  }
+
+  horarioBloqueadoPrev = bloqueado;
 }
 
 async function confirmarRecepcion(pedidoId) {
@@ -2403,19 +2556,29 @@ async function confirmarRecepcion(pedidoId) {
 
   showToast('✅ Recepción confirmada — pedido cerrado para facturación');
   await cargarPedidoHoy();
+  await cargarPendientesConfirmacion();
   await cargarPedidosDelDia();
 }
 
 // ── PEDIDOS: guardar en Supabase (pedidos + pedido_detalle reales) ──
 async function savePedido() {
+  // Cubre las tres rutas de esta función: crear, editar y cancelar con ceros.
+  // Cancelar después de que bodega compró en la Central es tan dañino como
+  // editar, así que también entra al bloqueo.
+  if (currentUser?.rol === 'sucursal' && !dentroDeHorario()) {
+    showToast(`⚠️ Fuera de horario. Los pedidos se registran de ${HORARIO_PEDIDO.inicio} a ${HORARIO_PEDIDO.fin}, hora del centro.`);
+    aplicarBloqueoHorario();
+    return;
+  }
   if (!currentUser?.tiendaId) { showToast('⚠️ Tu usuario no tiene sucursal asignada'); return; }
 
   const today = fechaNegocioHoy();
   const lineas = PRODUCTS.map(p => ({
     producto_id: p.id,
-    cant_solicitada: Math.round(+getInput(p.id) || 0),
+    cant_solicitada: normalizaCantidad(getInput(p.id), p.unit),
     tier_aplicado: (currentUser?.tier || 'b').toUpperCase(),
     precio_unitario: p.pCli,
+    unidad_aplicada: p.unit,
   })).filter(l => l.cant_solicitada > 0);
 
   if (!lineas.length) {
@@ -2633,8 +2796,11 @@ async function cargarPerfilYArrancar(authUser) {
   let tier = 'b';
   if (perfil.sucursal_id) {
     const { data: suc } = await sb.from('sucursales')
-      .select('tier_precio_default').eq('id', perfil.sucursal_id).single();
+      .select('tier_precio_default, horario_pedido_inicio, horario_pedido_fin')
+      .eq('id', perfil.sucursal_id).single();
     if (suc?.tier_precio_default) tier = suc.tier_precio_default.toLowerCase();
+    if (suc?.horario_pedido_inicio) HORARIO_PEDIDO.inicio = suc.horario_pedido_inicio.slice(0, 5);
+    if (suc?.horario_pedido_fin)    HORARIO_PEDIDO.fin    = suc.horario_pedido_fin.slice(0, 5);
   }
 
   currentUser = {
@@ -2653,7 +2819,10 @@ async function cargarPerfilYArrancar(authUser) {
   applyRoleUI();
   await cargarPedidosDelDia();
   await cargarPedidoHoy();
+  await cargarPendientesConfirmacion();
   await renderHistorial();
+  aplicarBloqueoHorario();
+  setInterval(aplicarBloqueoHorario, 30000); // cierra solo al dar la hora
   if (['admin','gerencia'].includes(currentUser.rol)) await actualizarBadgeLeadsInicial();
 }
 
