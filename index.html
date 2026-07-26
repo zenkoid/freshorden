@@ -1,8 +1,38 @@
 <!DOCTYPE html>
+<!--
+  ════════════════════════════════════════════════════════════════
+  FRESH ORDEN — LANDING PÚBLICA
+  Versión 1.1.0 · 25-jul-2026 · Velox Tech
+
+  Versionado INDEPENDIENTE del Sistema Operativo. La Landing y la
+  app se liberan por separado; amarrarlas al mismo número obligaría
+  a subir la Landing cada vez que cambia la app aunque no se le haya
+  tocado una línea.
+
+  Bitácora
+  ─────────────────────────────────────────────────────────────────
+  v1.1.0 · 25-jul-2026 — Experiencia móvil
+    · color-scheme "only light": evita que el navegador invierta la
+      paleta con su modo oscuro automático.
+    · Header: logo con flex-shrink:0 (se aplastaba), botones sin
+      quiebre de línea y con etiqueta corta en móvil.
+    · Escala tipográfica fluida (clamp) en titulares.
+    · Inputs a 16px en móvil — por debajo, iOS hace zoom al enfocar.
+    · Áreas táctiles de 48px, scroll-margin para el header sticky,
+      prefers-reduced-motion y foco visible por teclado.
+
+  v1.0.0 · 24-jul-2026 — Primera versión en producción
+    · Estructura completa, paleta de marca, formulario de leads
+      conectado a Supabase (tabla `leads`, inserta como anon).
+  ════════════════════════════════════════════════════════════════
+-->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="only light">
+<meta name="theme-color" content="#ffffff">
+<meta name="version" content="1.1.0">
 <title>Fresh Orden — Tu operación comienza con Fresh Orden</title>
 <meta name="description" content="Abasto de frutas y verduras frescas para restaurantes y cadenas, con control total del pedido a la factura. Frescura que llega en orden.">
 <link rel="icon" href="assets/LogoFO.png">
@@ -11,6 +41,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
+  color-scheme:only light;
   --green:#1a6b3f; --green-mid:#2d9e5e; --green-light:#e8f5ee; --green-border:#a8d5b8;
   --amber:#c27c14; --amber-light:#fef3e2;
   --gray-50:#f8f7f4; --gray-100:#edecea; --gray-200:#d4d2cc; --gray-500:#7c7a74; --gray-700:#3d3c38; --gray-900:#1e1d1a;
@@ -22,7 +53,7 @@
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
-body{font-family:var(--font);color:var(--gray-900);background:var(--white);line-height:1.55;-webkit-font-smoothing:antialiased}
+body{font-family:var(--font);color:var(--gray-900);background:var(--white);line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden;text-size-adjust:100%;-webkit-text-size-adjust:100%}
 img{max-width:100%;display:block}
 a{color:inherit}
 .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
@@ -40,12 +71,15 @@ h1,h2,h3{letter-spacing:-0.02em;font-weight:700}
 /* ── HEADER ── */
 header{ position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92); backdrop-filter:blur(8px); border-bottom:1px solid var(--gray-100); }
 .nav-inner{ display:flex; align-items:center; gap:20px; padding:14px 24px; max-width:1120px; margin:0 auto; }
-.brand{ display:flex; align-items:center; gap:10px; }
-.brand img{ height:60px; width:auto; }
+.brand{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.brand img{ height:60px; width:auto; max-width:none; }
+.nav-cta{ display:flex; align-items:center; gap:10px; margin-left:auto; flex-shrink:0; }
+.lbl-corto{ display:none; }
 .nav-links{ display:flex; gap:28px; margin-left:auto; font-size:14px; font-weight:500; color:var(--gray-700); }
 .nav-links a:hover{ color:var(--green); }
 @media (max-width:720px){ .nav-links{ display:none; } }
-.btn{ display:inline-flex; align-items:center; gap:8px; padding:10px 20px; border-radius:8px; font-weight:600; font-size:14px; text-decoration:none; border:1px solid transparent; cursor:pointer; transition:all .15s; font-family:var(--font); }
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 20px; border-radius:8px; font-weight:600; font-size:14px; text-decoration:none; border:1px solid transparent; cursor:pointer; transition:all .15s; font-family:var(--font); white-space:nowrap; -webkit-tap-highlight-color:transparent; }
+.btn:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{ outline:2px solid var(--green-mid); outline-offset:2px; }
 .btn-primary{ background:var(--green); color:#fff; }
 .btn-primary:hover{ background:#145530; }
 .btn-ghost{ background:transparent; color:var(--gray-900); border-color:var(--gray-200); }
@@ -55,9 +89,9 @@ header{ position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92); ba
 .hero{ padding:96px 0 64px; background:linear-gradient(180deg,var(--green-light) 0%, rgba(232,245,238,0) 100%); }
 .hero-grid{ display:grid; grid-template-columns:1.1fr .9fr; gap:56px; align-items:center; }
 @media (max-width:860px){ .hero-grid{ grid-template-columns:1fr; } }
-.hero h1{ font-size:44px; line-height:1.12; margin-bottom:18px; }
+.hero h1{ font-size:clamp(30px, 7.2vw, 44px); line-height:1.12; margin-bottom:18px; text-wrap:balance; }
 .hero h1 em{ font-style:normal; color:var(--green); }
-.hero p.lead{ font-size:18px; color:var(--gray-700); max-width:480px; margin-bottom:32px; }
+.hero p.lead{ font-size:clamp(16px, 4.2vw, 18px); color:var(--gray-700); max-width:480px; margin-bottom:32px; }
 .hero-ctas{ display:flex; gap:14px; flex-wrap:wrap; }
 .hero-visual{ position:relative; }
 .route-card{ background:var(--white); border:1px solid var(--gray-100); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); padding:28px; }
@@ -81,7 +115,7 @@ header{ position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92); ba
 
 /* ── MÓDULOS ── */
 .section-head{ max-width:620px; margin-bottom:48px; }
-.section-head h2{ font-size:32px; margin-top:10px; }
+.section-head h2{ font-size:clamp(24px, 5.6vw, 32px); margin-top:10px; text-wrap:balance; }
 .section-head p{ color:var(--gray-500); font-size:16px; margin-top:12px; }
 .modules{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
 @media (max-width:860px){ .modules{ grid-template-columns:repeat(2,1fr); } }
@@ -122,6 +156,68 @@ textarea{ resize:vertical; min-height:80px; }
 footer{ border-top:1px solid var(--gray-100); padding:36px 0; }
 .footer-inner{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; font-size:13px; color:var(--gray-500); }
 .footer-inner .brand img{ height:32px; }
+.footer-inner .ver{ font-family:var(--mono); font-size:12px; color:var(--gray-200); }
+
+/* ── ANCLAS ──
+   El header es sticky: sin esto, al tocar "Contacto" la sección
+   aterriza por debajo de la barra y el usuario no ve el encabezado. */
+section[id]{ scroll-margin-top:76px; }
+
+/* ════════════════════════════════════════════════════════════
+   MÓVIL — ajustes de experiencia
+   Se trabaja el rango ≤720px, con un segundo escalón en ≤400px
+   para equipos angostos.
+   ════════════════════════════════════════════════════════════ */
+@media (max-width:720px){
+  /* Header: logo legible, botones en una sola línea, barra más baja */
+  .nav-inner{ gap:12px; padding:9px 16px; }
+  .brand img{ height:38px; }
+  .nav-cta{ gap:8px; }
+  .nav-cta .btn{ padding:9px 14px; font-size:13px; min-height:40px; }
+  .lbl-largo{ display:none; }
+  .lbl-corto{ display:inline; }
+  section[id]{ scroll-margin-top:60px; }
+
+  /* Hero: menos aire muerto arriba, CTAs de ancho completo */
+  .hero{ padding:36px 0 44px; }
+  .hero-grid{ gap:32px; }
+  .hero p.lead{ margin-bottom:24px; }
+  .hero-ctas{ gap:10px; }
+  .hero-ctas .btn{ flex:1 1 100%; min-height:48px; font-size:15px; }
+  .route-card{ padding:20px; }
+  .route-card .step{ font-size:13.5px; padding:11px 0; }
+  .route-divider{ height:24px; }
+
+  /* Bloques de contenido: márgenes internos proporcionales */
+  .section-head{ margin-bottom:32px; }
+  .impact-col{ padding:26px 22px; }
+  .form-card{ padding:22px 18px; }
+  .promise{ padding:36px 22px; }
+
+  /* Pie: apilado y alineado a la izquierda, no repartido */
+  .footer-inner{ flex-direction:column; align-items:flex-start; gap:10px; }
+  .footer-inner .brand img{ height:28px; }
+}
+
+@media (max-width:520px){
+  /* 16px es el umbral: por debajo, Safari e iOS hacen zoom al enfocar
+     un campo y descuadran la página. */
+  input, select, textarea{ font-size:16px; padding:12px; }
+  .f-group{ margin-bottom:12px; }
+  .form-card .btn{ min-height:48px; font-size:15px; }
+}
+
+@media (max-width:400px){
+  .nav-inner{ gap:8px; padding:8px 14px; }
+  .brand img{ height:34px; }
+  .nav-cta .btn{ padding:8px 11px; font-size:12.5px; }
+  .wrap{ padding:0 16px; }
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{ scroll-behavior:auto; }
+  *{ transition-duration:.01ms !important; animation-duration:.01ms !important; }
+}
 </style>
 </head>
 <body>
@@ -134,8 +230,10 @@ footer{ border-top:1px solid var(--gray-100); padding:36px 0; }
       <a href="#impacto">Resultados</a>
       <a href="#contacto">Contacto</a>
     </nav>
-    <a href="app/" class="btn btn-ghost">Acceder al sistema</a>
-    <a href="#contacto" class="btn btn-primary">Solicitar información</a>
+    <div class="nav-cta">
+      <a href="app/" class="btn btn-ghost"><span class="lbl-largo">Acceder al sistema</span><span class="lbl-corto">Acceder</span></a>
+      <a href="#contacto" class="btn btn-primary"><span class="lbl-largo">Solicitar información</span><span class="lbl-corto">Cotizar</span></a>
+    </div>
   </div>
 </header>
 
@@ -228,7 +326,7 @@ footer{ border-top:1px solid var(--gray-100); padding:36px 0; }
   <div class="wrap contact-grid">
     <div>
       <p class="eyebrow">Hablemos</p>
-      <h2 style="font-size:30px;margin-top:10px">Cuéntanos de tu operación</h2>
+      <h2 style="font-size:clamp(24px,5.4vw,30px);margin-top:10px;text-wrap:balance">Cuéntanos de tu operación</h2>
       <p style="color:var(--gray-500);font-size:15px;margin-top:12px">Ya sea un restaurante independiente o una cadena con varias sucursales, te mostramos cómo Fresh Orden ordena tu abasto de principio a fin.</p>
       <div class="trust-list">
         <div class="trust-item"><div class="trust-icon">🥬</div><div><h4>Selección cuidadosa</h4><p>Compras inteligentes directo en Central de Abasto.</p></div></div>
@@ -269,11 +367,19 @@ footer{ border-top:1px solid var(--gray-100); padding:36px 0; }
   <div class="wrap footer-inner">
     <div class="brand"><img src="assets/LogoFO.png" alt="Fresh Orden"></div>
     <div>freshorden.mx · freshorden.com</div>
-    <div>Desarrollado por Velox Tech</div>
+    <div>Desarrollado por Velox Tech · <span class="ver">v1.1.0</span></div>
   </div>
 </footer>
 
 <script>
+// ============================================================
+// VERSIÓN — fuente única para el pie, el meta y la consola.
+// Sirve para confirmar qué build está sirviendo el hosting sin
+// tener que abrir el código fuente desde el celular.
+// ============================================================
+const LANDING_VERSION = '1.1.0';
+console.log('%cFresh Orden · Landing v' + LANDING_VERSION, 'color:#1a6b3f;font-weight:bold');
+
 // ============================================================
 // SUPABASE — mismo proyecto que usa el Sistema Operativo
 // ============================================================
