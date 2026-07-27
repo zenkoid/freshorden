@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.8.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.8.1</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -1881,6 +1881,23 @@ function checkSurtirNotas() {
   }
 }
 
+// v1.8.1 — El error 42P10 ("no unique or exclusion constraint matching the
+// ON CONFLICT specification") NO lo produce esta pantalla: lo lanza el trigger
+// de la base que crea la factura al surtir (Ajuste 4). Su INSERT ... ON CONFLICT
+// apunta a una restricción UNIQUE que en producción no existe. Se traduce para
+// que Bodega no lo lea como un error de captura suyo.
+function mensajeErrorSurtido(error) {
+  const codigo = error?.code || '';
+  const msg = error?.message || 'error desconocido';
+  if (codigo === '42P10' || /ON CONFLICT specification/i.test(msg)) {
+    return 'la generación automática de la factura falló en la base de datos: ' +
+           'el trigger usa ON CONFLICT sin una restricción UNIQUE que lo respalde ' +
+           '(revisar facturas_cfdi.pedido_id). Las cantidades surtidas SÍ quedaron ' +
+           'guardadas; el pedido sigue en Capturado. Reporta a soporte — código 42P10.';
+  }
+  return msg;
+}
+
 async function confirmarSurtido() {
   if (!pedidoASurtir) return;
 
@@ -1911,11 +1928,22 @@ async function confirmarSurtido() {
     cant_surtida: normalizaCantidad(i.value, i.dataset.unidad)
   }));
 
+  // v1.8.1 — Antes se ignoraba el resultado de estos updates. Si uno fallaba
+  // (RLS, red, tipo de dato), el pedido se marcaba igual como surtido y el
+  // trigger generaba la factura con cant_surtida = 0. Ahora se aborta ANTES de
+  // tocar el estatus: es preferible reintentar que facturar mal.
   for (const act of actualizaciones) {
-    await sb.from('pedido_detalle')
+    const { error: errDetalle } = await sb.from('pedido_detalle')
       .update({ cant_surtida: act.cant_surtida })
       .eq('pedido_id', pedidoASurtir.id)
       .eq('producto_id', act.producto_id);
+
+    if (errDetalle) {
+      btn.textContent = 'Marcar como surtido'; btn.disabled = false;
+      showToast('⚠️ No se pudieron guardar las cantidades surtidas: ' + errDetalle.message +
+                ' — El pedido NO se marcó como surtido. Vuelve a intentarlo.');
+      return;
+    }
   }
 
   const today = fechaNegocioHoy();
@@ -1934,7 +1962,7 @@ async function confirmarSurtido() {
 
   btn.textContent = 'Marcar como surtido'; btn.disabled = false;
 
-  if (error) { showToast('⚠️ Error al marcar surtido: ' + error.message); return; }
+  if (error) { showToast('⚠️ Error al marcar surtido: ' + mensajeErrorSurtido(error)); return; }
 
   showToast(hayDiferencias
     ? '✅ Surtido diferente registrado — pendiente de confirmación de la sucursal'
