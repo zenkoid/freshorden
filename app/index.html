@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.8.1</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.9.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -509,6 +509,11 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
     </button>
     <button class="nav-item" onclick="showSection('reportes')">
       <span class="nav-icon">📈</span> Reportes
+    </button>
+    <div class="nav-section-label">Administración</div>
+    <button class="nav-item" onclick="showSection('excepciones')">
+      <span class="nav-icon">⏱️</span> Excepciones de Horario
+      <span class="nav-badge" id="badge-excepciones" style="display:none">0</span>
     </button>
   </nav>
   <div class="sidebar-footer">
@@ -1146,6 +1151,59 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       </div>
     </div>
 
+    <!-- ===== EXCEPCIONES DE HORARIO (solo Admin) ===== -->
+    <div class="section" id="section-excepciones">
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="card-title">Abrir ventana extraordinaria</div>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-warn" style="margin-bottom:16px">
+            Habilita la captura de pedidos por <b>30 minutos</b> en una sucursal, fuera del horario normal.
+            Queda registrado quién autorizó y por qué, y los pedidos capturados durante la ventana
+            se marcan de forma permanente para efectos de penalización.
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Sucursal</label>
+              <select class="form-select" id="exc-sucursal">
+                <option value="">Selecciona una sucursal…</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label class="form-label">Motivo (obligatorio, mínimo 10 caracteres)</label>
+            <input type="text" class="form-input" id="exc-motivo"
+                   placeholder="Ej. Falla de internet en sucursal reportada a las 15:40">
+          </div>
+          <button class="topbar-btn primary" id="btn-exc-otorgar" onclick="otorgarExcepcion()">
+            Abrir 30 minutos
+          </button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="card-title">Ventanas vigentes</div>
+          <button class="topbar-btn" onclick="cargarExcepciones()">↻ Actualizar</button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div id="exc-vigentes"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Bitácora — últimas 50</div>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div id="exc-historial"></div>
+        </div>
+      </div>
+
+    </div>
+
   </div><!-- /content -->
 </main>
 </div><!-- /app -->
@@ -1321,7 +1379,7 @@ const SECCIONES_POR_ROL = {
   corporativo: ['pedidos','reportes'],
   bodega:      ['pedidos','recepcion'],
   gerencia:    ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','leads','reportes'],
-  admin:       ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','leads','reportes'],
+  admin:       ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','leads','reportes','excepciones'],
 };
 
 function applyRoleUI() {
@@ -1461,9 +1519,48 @@ function horaNegocioAhora() {
   return FMT_HORA_MX.format(new Date()); // 'HH:MM'
 }
 
+// ── Ventana extraordinaria (v1.9.0) ──
+// Excepción otorgada por Admin para una sucursal. El candado real vive en el
+// trigger fn_valida_horario_pedido de la base; esto solo refleja en pantalla
+// lo que la base ya va a permitir. Se refresca en el mismo poll de 30s.
+let EXCEPCION_HORARIO = null; // { id, fin, motivo } vigente para mi sucursal
+
+function excepcionVigenteActiva() {
+  return !!(EXCEPCION_HORARIO && new Date(EXCEPCION_HORARIO.fin) > new Date());
+}
+
+function horaFinExcepcion() {
+  if (!EXCEPCION_HORARIO) return '';
+  return FMT_HORA_MX.format(new Date(EXCEPCION_HORARIO.fin));
+}
+
+async function refrescarExcepcionHorario() {
+  if (currentUser?.rol !== 'sucursal' || !currentUser?.tiendaId) { EXCEPCION_HORARIO = null; return; }
+  const ahora = new Date().toISOString();
+  const { data, error } = await sb.from('excepciones_horario')
+    .select('id, fin, motivo')
+    .eq('sucursal_id', currentUser.tiendaId)
+    .is('cerrado_en', null)
+    .lte('inicio', ahora)
+    .gt('fin', ahora)
+    .order('fin', { ascending: false })
+    .limit(1);
+  // Ante un error de red se conserva el estado previo: mejor eso que
+  // cerrarle la ventana a alguien que sí la tiene autorizada.
+  if (error) return;
+  EXCEPCION_HORARIO = (data && data[0]) ? data[0] : null;
+}
+
+// Poll único: primero se consulta la excepción, luego se pinta el bloqueo.
+async function tickHorario() {
+  await refrescarExcepcionHorario();
+  aplicarBloqueoHorario();
+}
+
 // Comparación lexicográfica de 'HH:MM' — válida por el zero-padding.
 // Ventana cerrada por la derecha: 15:59 pasa, 16:00 ya no.
 function dentroDeHorario() {
+  if (excepcionVigenteActiva()) return true;
   const ahora = horaNegocioAhora();
   return ahora >= HORARIO_PEDIDO.inicio && ahora < HORARIO_PEDIDO.fin;
 }
@@ -1487,7 +1584,7 @@ function init() {
     : 'Todas / N-A';
 
   // Populate tienda selects (pantallas de admin/gerencia que sí requieren elegir tienda)
-  const tiendaSelects = document.querySelectorAll('#pf-tienda, #hist-tienda');
+  const tiendaSelects = document.querySelectorAll('#pf-tienda, #hist-tienda, #exc-sucursal');
   tiendaSelects.forEach(sel => {
     TIENDAS.forEach(t => {
       const o = document.createElement('option');
@@ -1573,6 +1670,7 @@ const SECTION_META = {
   conciliacion: { title:'Conciliación', sub:'Facturas vs pagos' },
   reportes:     { title:'Reportes', sub:'Análisis de operación' },
   leads:        { title:'Leads', sub:'Solicitudes de información desde la Landing Page' },
+  excepciones:  { title:'Excepciones de Horario', sub:'Ventanas extraordinarias de captura y su bitácora' },
 };
 
 function showSection(id) {
@@ -1598,6 +1696,7 @@ function showSection(id) {
   }
   if (id==='prefactura') renderPreFactura();
   if (id==='leads') cargarLeads();
+  if (id==='excepciones') cargarExcepciones();
 }
 
 function switchTab(tabId, group, btn) {
@@ -2562,7 +2661,15 @@ function aplicarBloqueoHorario() {
     if (btn) btn.disabled = true;
     document.querySelectorAll('.pedido-input').forEach(i => i.disabled = true);
   } else {
-    if (aviso) aviso.innerHTML = '';
+    // v1.9.0 — Si está abierto por excepción, la sucursal debe saberlo:
+    // que sepan que queda registrado es la mitad del control.
+    if (aviso) aviso.innerHTML = excepcionVigenteActiva()
+      ? `<div class="alert alert-info" style="margin-bottom:12px">
+           ⏱️ <b>Ventana extraordinaria abierta por Admin.</b> Vence a las
+           <b>${horaFinExcepcion()}</b> (hora del centro).
+           Los pedidos que captures ahora quedan registrados en la bitácora de excepciones.
+         </div>`
+      : '';
     if (horarioBloqueadoPrev === true) cargarPedidoHoy();
   }
 
@@ -2806,6 +2913,151 @@ async function actualizarBadgeLeadsInicial() {
   }
 }
 
+// ============================================================
+// EXCEPCIONES DE HORARIO (v1.9.0) — solo Admin
+// El renglón en excepciones_horario es a la vez el permiso que lee el
+// trigger de la base y la bitácora para penalizar después. Caduca solo:
+// no hay switch que alguien pueda dejar prendido.
+// ============================================================
+const EXC_DURACION_MIN = 30;
+
+// El motivo es texto libre que se pinta con innerHTML. Riesgo bajo por ser
+// interno, pero evitarlo cuesta cinco líneas.
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => (
+    { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+  ));
+}
+
+function fmtFechaHoraMx(iso) {
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit',
+    year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+  }).format(new Date(iso));
+}
+
+function minutosRestantes(finIso) {
+  return Math.max(0, Math.ceil((new Date(finIso) - new Date()) / 60000));
+}
+
+async function otorgarExcepcion() {
+  if (currentUser?.rol !== 'admin') { showToast('⚠️ Solo Admin puede abrir ventanas extraordinarias'); return; }
+
+  const sucursalId = document.getElementById('exc-sucursal').value;
+  const motivo     = document.getElementById('exc-motivo').value.trim();
+
+  if (!sucursalId) { showToast('⚠️ Selecciona una sucursal'); return; }
+  // El mínimo de 10 caracteres también está como CHECK en la base: una
+  // excepción sin motivo escrito no sirve para justificar un cobro.
+  if (motivo.length < 10) { showToast('⚠️ El motivo es obligatorio (mínimo 10 caracteres)'); return; }
+
+  const nombreSuc = TIENDAS.find(t => t.id === sucursalId)?.name || 'la sucursal';
+  if (!confirm(`¿Abrir la captura de pedidos en ${nombreSuc} por ${EXC_DURACION_MIN} minutos?\n\nQueda registrado a tu nombre y los pedidos capturados se marcarán para penalización.`)) return;
+
+  const btn = document.getElementById('btn-exc-otorgar');
+  btn.disabled = true; btn.textContent = 'Abriendo…';
+
+  const fin = new Date(Date.now() + EXC_DURACION_MIN * 60000).toISOString();
+  const { error } = await sb.from('excepciones_horario').insert({
+    sucursal_id:  sucursalId,
+    otorgado_por: currentUser.id,
+    motivo,
+    fin
+  });
+
+  btn.disabled = false; btn.textContent = `Abrir ${EXC_DURACION_MIN} minutos`;
+
+  if (error) { showToast('⚠️ No se pudo abrir la ventana: ' + error.message); return; }
+
+  document.getElementById('exc-motivo').value = '';
+  document.getElementById('exc-sucursal').value = '';
+  showToast(`✅ Ventana abierta en ${nombreSuc} por ${EXC_DURACION_MIN} min`);
+  await cargarExcepciones();
+}
+
+async function cerrarExcepcion(id) {
+  if (currentUser?.rol !== 'admin') return;
+  if (!confirm('¿Cerrar ahora esta ventana extraordinaria?\n\nEl registro se conserva en la bitácora con la hora real de cierre.')) return;
+
+  // Se marca cerrado_en y NO se toca 'fin': así la bitácora conserva
+  // cuánto se autorizó frente a cuánto se usó realmente.
+  const { error } = await sb.from('excepciones_horario')
+    .update({ cerrado_en: new Date().toISOString(), cerrado_por: currentUser.id })
+    .eq('id', id);
+
+  if (error) { showToast('⚠️ No se pudo cerrar: ' + error.message); return; }
+  showToast('✅ Ventana cerrada');
+  await cargarExcepciones();
+}
+
+async function cargarExcepciones() {
+  if (!['admin', 'gerencia'].includes(currentUser?.rol)) return;
+
+  const { data, error } = await sb.from('excepciones_horario')
+    .select('id, sucursal_id, motivo, inicio, fin, cerrado_en, otorgado_por')
+    .order('creado_en', { ascending: false })
+    .limit(50);
+
+  const elVig  = document.getElementById('exc-vigentes');
+  const elHist = document.getElementById('exc-historial');
+  if (!elVig || !elHist) return;
+
+  if (error) {
+    elVig.innerHTML = `<div class="empty-state"><div class="empty-msg">Error: ${error.message}</div></div>`;
+    return;
+  }
+
+  const ahora    = new Date();
+  const nombre   = id => TIENDAS.find(t => t.id === id)?.name || '—';
+  const esVigente = e => !e.cerrado_en && new Date(e.fin) > ahora;
+
+  const vigentes = (data || []).filter(esVigente);
+  const badge = document.getElementById('badge-excepciones');
+  if (badge) {
+    badge.textContent = vigentes.length;
+    badge.style.display = vigentes.length ? '' : 'none';
+  }
+
+  if (!vigentes.length) {
+    elVig.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div>
+      <div class="empty-msg">Ninguna ventana abierta. Todas las sucursales operan en horario normal.</div></div>`;
+  } else {
+    elVig.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Sucursal</th><th>Motivo</th><th>Vence</th><th style="text-align:right">Restan</th><th></th></tr></thead>
+      <tbody>${vigentes.map(e => `
+        <tr>
+          <td><b>${nombre(e.sucursal_id)}</b></td>
+          <td>${escapeHtml(e.motivo)}</td>
+          <td class="mono">${fmtFechaHoraMx(e.fin)}</td>
+          <td class="mono" style="text-align:right"><span class="badge badge-amber">${minutosRestantes(e.fin)} min</span></td>
+          <td style="text-align:right">
+            <button class="topbar-btn" onclick="cerrarExcepcion('${e.id}')">Cerrar ahora</button>
+          </td>
+        </tr>`).join('')}</tbody></table></div>`;
+  }
+
+  if (!data || !data.length) {
+    elHist.innerHTML = `<div class="empty-state"><div class="empty-msg">Sin excepciones registradas.</div></div>`;
+    return;
+  }
+
+  elHist.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Sucursal</th><th>Motivo</th><th>Desde</th><th>Hasta</th><th>Estado</th></tr></thead>
+    <tbody>${data.map(e => {
+      const estado = esVigente(e)
+        ? '<span class="badge badge-amber">Vigente</span>'
+        : (e.cerrado_en ? '<span class="badge badge-gray">Cerrada antes</span>'
+                        : '<span class="badge badge-gray">Expirada</span>');
+      return `<tr>
+        <td>${nombre(e.sucursal_id)}</td>
+        <td>${escapeHtml(e.motivo)}</td>
+        <td class="mono">${fmtFechaHoraMx(e.inicio)}</td>
+        <td class="mono">${fmtFechaHoraMx(e.cerrado_en || e.fin)}</td>
+        <td>${estado}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
 // ── SESIÓN / LOGIN vía Supabase Auth + tabla `perfiles` ──
 async function cargarPerfilYArrancar(authUser) {
   const { data: perfil, error } = await sb
@@ -2849,9 +3101,10 @@ async function cargarPerfilYArrancar(authUser) {
   await cargarPedidoHoy();
   await cargarPendientesConfirmacion();
   await renderHistorial();
-  aplicarBloqueoHorario();
-  setInterval(aplicarBloqueoHorario, 30000); // cierra solo al dar la hora
+  tickHorario();
+  setInterval(tickHorario, 30000); // cierra solo al dar la hora; también detecta excepciones
   if (['admin','gerencia'].includes(currentUser.rol)) await actualizarBadgeLeadsInicial();
+  if (currentUser.rol === 'admin') await cargarExcepciones();
 }
 
 async function checkSession() {
