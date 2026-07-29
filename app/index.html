@@ -439,7 +439,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.9.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.10.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -2186,10 +2186,14 @@ async function renderPreFactura() {
   // surtido, con estatus 'pendiente' y los totales ya calculados desde
   // importe_surtido. Esta pantalla lee esas facturas pendientes.
   // El UNIQUE sobre facturas_cfdi.pedido_id impide la doble facturación.
+  // v1.10.0 — También se muestran las que quedaron en 'error'. Antes se
+  // filtraba solo por 'pendiente' y una factura fallida desaparecía de la
+  // pantalla sin dejar rastro: nadie se enteraba de que ese pedido no se
+  // había facturado.
   let query = sb
     .from('facturas_cfdi')
-    .select('id, subtotal, iva, total, estatus, creado_en, pedidos!inner(id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_surtida, precio_unitario, importe_surtido, unidad_aplicada))')
-    .eq('estatus', 'pendiente')
+    .select('id, subtotal, iva, total, estatus, creado_en, serie, folio, respuesta_pac, pedidos!inner(id, fecha, estatus, sucursal_id, sucursales(nombre, serie_cfdi), pedido_detalle(producto_id, cant_surtida, precio_unitario, importe_surtido, unidad_aplicada))')
+    .in('estatus', ['pendiente', 'error'])
     .order('creado_en', { ascending: true });
 
   if (tiendaFilter) query = query.eq('pedidos.sucursal_id', tiendaFilter);
@@ -2202,6 +2206,14 @@ async function renderPreFactura() {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">🧾</div><div class="empty-msg">No hay facturas pendientes de timbrar</div></div>';
     return;
   }
+
+  const conError = rows.filter(f => f.estatus === 'error').length;
+  const avisoGlobal = conError
+    ? `<div class="alert alert-warn" style="margin-bottom:16px;max-width:760px">
+         ⚠️ <b>${conError} factura${conError > 1 ? 's' : ''} con error de timbrado.</b>
+         Revisa el motivo y reintenta. Mientras no se timbren, esos pedidos no están facturados.
+       </div>`
+    : '';
 
   el.innerHTML = rows.map(f => {
     const ped = f.pedidos;
@@ -2228,11 +2240,25 @@ async function renderPreFactura() {
       ? '<span class="badge badge-green">Confirmada por la sucursal</span>'
       : '<span class="badge badge-amber">Sin confirmar por la sucursal</span>';
 
+    // v1.10.0 — Una factura en error trae el motivo dentro de respuesta_pac.
+    // Se muestra el mensaje de Facturapi tal cual: es lo que permite
+    // distinguir un dato fiscal malo de una caída del servicio.
+    const enError = f.estatus === 'error';
+    const motivo = enError ? mensajeErrorPac(f.respuesta_pac) : '';
+    const bloqueError = enError
+      ? `<div class="alert alert-warn" style="margin:12px 16px">
+           <b>No se pudo timbrar.</b><br>
+           <span style="font-size:12px">${motivo}</span>
+           ${f.folio ? `<br><span style="font-size:11px;color:var(--gray-500)">Folio reservado: ${f.serie || ''} ${f.folio}</span>` : ''}
+         </div>`
+      : '';
+
     return `
-    <div class="card" style="margin-bottom:16px;max-width:760px">
+    <div class="card" style="margin-bottom:16px;max-width:760px${enError ? ';border-color:var(--red)' : ''}">
       <div class="card-header">
         <div>
-          <div class="card-title">${ped.sucursales?.nombre || '—'} — ${ped.fecha}</div>
+          <div class="card-title">${ped.sucursales?.nombre || '—'} — ${ped.fecha}
+            ${enError ? '<span class="badge badge-red" style="margin-left:8px">Error de timbrado</span>' : ''}</div>
           <div style="font-size:11px;color:var(--gray-500);margin-top:4px">${avisoConfirm}</div>
         </div>
         <div style="margin-left:auto">
@@ -2241,6 +2267,7 @@ async function renderPreFactura() {
           </label>
         </div>
       </div>
+      ${bloqueError}
       <div id="pf-detalle-${ped.id}" style="display:none">
         <div class="card-body">
           <div class="table-wrap">
@@ -2257,10 +2284,27 @@ async function renderPreFactura() {
         </div>
       </div>
       <div class="modal-footer" style="border-top:1px solid var(--gray-100)">
-        <button class="topbar-btn primary" id="pf-btn-aprobar-${ped.id}" disabled onclick="aprobarPreFactura('${ped.id}')">Aprobar → Generar Factura</button>
+        <button class="topbar-btn primary" id="pf-btn-aprobar-${ped.id}"
+                ${enError ? '' : 'disabled'}
+                onclick="timbrarFactura('${f.id}', '${ped.id}')">
+          ${enError ? '↻ Reintentar timbrado' : 'Aprobar → Timbrar CFDI'}
+        </button>
       </div>
     </div>`;
   }).join('');
+
+  el.innerHTML = avisoGlobal + el.innerHTML;
+}
+
+// Extrae un mensaje legible de respuesta_pac. Facturapi devuelve el detalle
+// en 'errors'; si no lo hay, se cae al mensaje general.
+function mensajeErrorPac(resp) {
+  if (!resp) return 'Sin detalle registrado.';
+  const r = resp.recibido || resp;
+  if (Array.isArray(r.errors) && r.errors.length) {
+    return r.errors.map(e => `${e.path ? e.path + ': ' : ''}${e.message}`).join('<br>');
+  }
+  return r.message || 'Error sin mensaje. Revisa respuesta_pac en la base.';
 }
 
 function togglePreviaFactura(pedidoId, visible) {
@@ -2270,21 +2314,61 @@ function togglePreviaFactura(pedidoId, visible) {
   if (btn) btn.disabled = !visible;
 }
 
-async function aprobarPreFactura(pedidoId) {
-  if (!confirm('¿Confirmas aprobar la generación de la factura para este pedido?\n\nQuedará marcado como "Pre-facturado", listo para timbrarse ante el SAT.')) return;
+// v1.10.0 — Timbrado real vía Edge Function.
+//
+// La llave de Facturapi NO puede vivir aquí: este archivo es público en
+// GitHub Pages. Todo el timbrado ocurre del lado servidor; esta función
+// solo dispara la llamada con el token de la sesión.
+async function timbrarFactura(facturaId, pedidoId) {
+  if (!confirm('¿Confirmas timbrar el CFDI de este pedido?\n\nSe emitirá un comprobante fiscal ante el SAT. Esta acción no se deshace: para corregir habría que cancelar la factura.')) return;
 
-  const { error } = await sb.from('pedidos')
-    .update({
-      estatus: 'prefacturado',
-      prefacturado_por: currentUser.id,
-      prefacturado_en: new Date().toISOString()
-    })
-    .eq('id', pedidoId);
+  const btn = document.getElementById('pf-btn-aprobar-' + pedidoId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Timbrando...'; }
 
-  if (error) { showToast('⚠️ Error al aprobar: ' + error.message); return; }
+  try {
+    // El sello de aprobación humana se registra antes de timbrar. Si el
+    // timbrado falla, el pedido queda en 'prefacturado': aprobado pero no
+    // facturado, que es exactamente lo que ocurrió.
+    await sb.from('pedidos')
+      .update({
+        estatus: 'prefacturado',
+        prefacturado_por: currentUser.id,
+        prefacturado_en: new Date().toISOString()
+      })
+      .eq('id', pedidoId);
 
-  showToast('✅ Pre-factura aprobada — lista para timbrarse ante el SAT');
-  renderPreFactura();
+    const sesion = (await sb.auth.getSession()).data.session;
+    if (!sesion) { showToast('⚠️ Tu sesión expiró. Vuelve a entrar.'); return; }
+
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/timbrar-factura`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + sesion.access_token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ factura_id: facturaId })
+    });
+
+    const res = await resp.json();
+
+    if (!resp.ok || !res.ok) {
+      showToast('⚠️ No se pudo timbrar: ' + (res.error || 'error desconocido'));
+      renderPreFactura();
+      return;
+    }
+
+    await sb.from('pedidos').update({ estatus: 'facturado' }).eq('id', pedidoId);
+
+    showToast(`✅ CFDI timbrado — ${res.serie} ${res.folio}`);
+    renderPreFactura();
+
+  } catch (e) {
+    // Un fallo de red aquí NO significa que no se haya timbrado: la
+    // petición pudo llegar. Por eso no se marca error, se recarga y se
+    // deja que el estatus real de la base mande.
+    showToast('⚠️ Falló la conexión. Recarga y revisa antes de reintentar.');
+    renderPreFactura();
+  }
 }
 
 // ============================================================
