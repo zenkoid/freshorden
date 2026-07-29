@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root {
   --green: #1a6b3f;
@@ -439,7 +440,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.10.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.11.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -498,6 +499,12 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
     </button>
     <button class="nav-item" onclick="showSection('prefactura')">
       <span class="nav-icon">🧾</span> Pre-Factura
+    </button>
+    <button class="nav-item" onclick="showSection('facturas')">
+      <span class="nav-icon">📄</span> Facturas Timbradas
+    </button>
+    <button class="nav-item" onclick="showSection('misfacturas')">
+      <span class="nav-icon">📄</span> Mis Facturas
     </button>
     <button class="nav-item" onclick="showSection('conciliacion')">
       <span class="nav-icon">💰</span> Conciliación
@@ -946,6 +953,46 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       </div>
     </div>
 
+    <!-- ===== MIS FACTURAS (Sucursal) ===== -->
+    <div class="section" id="section-misfacturas">
+      <div id="mis-facturas-content">
+        <div class="empty-state"><div class="empty-msg">Cargando...</div></div>
+      </div>
+    </div>
+
+    <!-- ===== FACTURAS TIMBRADAS (Admin / Gerencia) ===== -->
+    <div class="section" id="section-facturas">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Sucursal</label>
+              <select class="form-select" id="fx-sucursal"><option value="">Todas</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Desde</label>
+              <input type="date" class="form-input" id="fx-desde">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Hasta</label>
+              <input type="date" class="form-input" id="fx-hasta">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Folio o UUID</label>
+              <input type="text" class="form-input" id="fx-busca" placeholder="1423 o parte del UUID">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button class="topbar-btn primary" onclick="renderFacturasTimbradas()">Buscar</button>
+            <button class="topbar-btn" id="fx-btn-zip" onclick="descargarZipPeriodo()">⬇ ZIP del periodo</button>
+          </div>
+        </div>
+      </div>
+      <div id="facturas-content">
+        <div class="empty-state"><div class="empty-icon">📄</div><div class="empty-msg">Ajusta los filtros y presiona Buscar</div></div>
+      </div>
+    </div>
+
     <!-- ===== CONCILIACION ===== -->
     <div class="section" id="section-conciliacion">
       <div class="tabs">
@@ -1375,11 +1422,11 @@ let currentUser = null;
 
 // Secciones visibles por rol en el sidebar
 const SECCIONES_POR_ROL = {
-  sucursal:    ['pedidos'],
+  sucursal:    ['pedidos','misfacturas'],
   corporativo: ['pedidos','reportes'],
   bodega:      ['pedidos','recepcion'],
-  gerencia:    ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','leads','reportes'],
-  admin:       ['dashboard','pedidos','recepcion','rutas','prefactura','conciliacion','leads','reportes','excepciones'],
+  gerencia:    ['dashboard','pedidos','recepcion','rutas','prefactura','facturas','conciliacion','leads','reportes'],
+  admin:       ['dashboard','pedidos','recepcion','rutas','prefactura','facturas','conciliacion','leads','reportes','excepciones'],
 };
 
 function applyRoleUI() {
@@ -1667,6 +1714,8 @@ const SECTION_META = {
   recepcion:    { title:'Recepción Bodega', sub:'Registro de entradas de proveedor' },
   rutas:        { title:'Rutas y Tiendas', sub:'Configuración de rutas de distribución' },
   prefactura:   { title:'Pre-Factura', sub:'Generación de pre-facturas por tienda' },
+  facturas:     { title:'Facturas Timbradas', sub:'Consulta y descarga de CFDI emitidos' },
+  misfacturas:  { title:'Mis Facturas', sub:'CFDI de tu sucursal — últimos 3 meses' },
   conciliacion: { title:'Conciliación', sub:'Facturas vs pagos' },
   reportes:     { title:'Reportes', sub:'Análisis de operación' },
   leads:        { title:'Leads', sub:'Solicitudes de información desde la Landing Page' },
@@ -1695,6 +1744,8 @@ function showSection(id) {
     renderPedidosDelDia();
   }
   if (id==='prefactura') renderPreFactura();
+  if (id==='facturas')    initFacturasTimbradas();
+  if (id==='misfacturas') renderMisFacturas();
   if (id==='leads') cargarLeads();
   if (id==='excepciones') cargarExcepciones();
 }
@@ -2368,6 +2419,275 @@ async function timbrarFactura(facturaId, pedidoId) {
     // deja que el estatus real de la base mande.
     showToast('⚠️ Falló la conexión. Recarga y revisa antes de reintentar.');
     renderPreFactura();
+  }
+}
+
+// ============================================================
+// FACTURAS TIMBRADAS — consulta y descarga (v1.11.0)
+//
+// Los CFDI viven en el bucket privado 'facturas-cfdi', con ruta
+// {sucursal_id}/{año}/{SERIE}-{folio}.{pdf|xml}. La política de Storage
+// decide quién alcanza qué: la sucursal solo su carpeta y solo PDF.
+// Aquí no se filtra por seguridad, se filtra por comodidad.
+// ============================================================
+
+let FACTURAS_VISIBLES = [];  // último resultado, para el ZIP
+
+// Las fechas del CFDI se pintan en hora del centro. Con .toISOString()
+// una factura de las 23:15 aparecería como del día siguiente.
+function fmtFechaMx(iso, conHora) {
+  if (!iso) return '—';
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone: 'America/Mexico_City',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    ...(conHora ? { hour: '2-digit', minute: '2-digit' } : {})
+  }).format(new Date(iso));
+}
+
+function hoyMx() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City', year:'numeric', month:'2-digit', day:'2-digit'
+  }).format(new Date());
+}
+
+// México no observa horario de verano desde 2022, así que el offset es fijo.
+const OFFSET_MX = '-06:00';
+
+async function bajarArchivoCFDI(ruta) {
+  const { data, error } = await sb.storage.from('facturas-cfdi').download(ruta);
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function descargarCFDI(ruta, nombre) {
+  try {
+    const blob = await bajarArchivoCFDI(ruta);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    showToast('⚠️ No se pudo descargar: ' + e.message);
+  }
+}
+
+// ── Vista de sucursal: últimos 3 meses, solo PDF ──
+async function renderMisFacturas() {
+  const el = document.getElementById('mis-facturas-content');
+  if (!el) return;
+  if (!currentUser?.tiendaId) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-msg">Tu usuario no tiene sucursal asignada.</div></div>';
+    return;
+  }
+  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
+
+  const desde = new Date();
+  desde.setMonth(desde.getMonth() - 3);
+
+  const { data, error } = await sb
+    .from('facturas_cfdi')
+    .select('id, serie, folio, total, fecha_timbrado, pdf_url, pedidos!inner(fecha, sucursal_id)')
+    .eq('estatus', 'timbrada')
+    .eq('pedidos.sucursal_id', currentUser.tiendaId)
+    .gte('fecha_timbrado', desde.toISOString())
+    .order('fecha_timbrado', { ascending: false });
+
+  if (error) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-msg">No se pudieron cargar tus facturas: ${error.message}</div></div>`;
+    return;
+  }
+
+  const rows = data || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><div class="empty-msg">No tienes facturas timbradas en los últimos 3 meses</div></div>';
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="card" style="max-width:820px">
+      <div class="card-header"><div class="card-title">${rows.length} factura${rows.length>1?'s':''} — últimos 3 meses</div></div>
+      <div class="card-body" style="padding:0">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Factura</th><th>Fecha</th><th>Pedido</th>
+              <th style="text-align:right">Total</th><th style="text-align:center">PDF</th>
+            </tr></thead>
+            <tbody>${rows.map(f => `
+              <tr>
+                <td class="mono bold">${f.serie || ''} ${f.folio || ''}</td>
+                <td>${fmtFechaMx(f.fecha_timbrado)}</td>
+                <td style="color:var(--gray-500)">${f.pedidos?.fecha || '—'}</td>
+                <td class="mono bold" style="text-align:right">$${(+f.total).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                <td style="text-align:center">
+                  ${f.pdf_url
+                    ? `<button class="topbar-btn" onclick="descargarCFDI('${f.pdf_url}','${f.serie}-${f.folio}.pdf')">⬇ PDF</button>`
+                    : '<span class="badge badge-gray">Sin archivo</span>'}
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Vista de Admin: filtros y descarga masiva ──
+function initFacturasTimbradas() {
+  const sel = document.getElementById('fx-sucursal');
+  if (sel && sel.options.length <= 1) {
+    TIENDAS.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.id; o.textContent = t.name;
+      sel.appendChild(o);
+    });
+  }
+  const desde = document.getElementById('fx-desde');
+  const hasta = document.getElementById('fx-hasta');
+  if (desde && !desde.value) desde.value = hoyMx().slice(0, 8) + '01';
+  if (hasta && !hasta.value) hasta.value = hoyMx();
+  renderFacturasTimbradas();
+}
+
+async function renderFacturasTimbradas() {
+  const el = document.getElementById('facturas-content');
+  if (!el) return;
+  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Buscando...</div></div>';
+
+  const suc   = document.getElementById('fx-sucursal')?.value || '';
+  const desde = document.getElementById('fx-desde')?.value || '';
+  const hasta = document.getElementById('fx-hasta')?.value || '';
+  // Se limpia la búsqueda: los operadores de PostgREST se separan por comas
+  // y paréntesis, así que dejar pasar esos caracteres rompería el filtro.
+  const busca = (document.getElementById('fx-busca')?.value || '').replace(/[^0-9A-Za-z-]/g, '');
+
+  let q = sb.from('facturas_cfdi')
+    .select('id, serie, folio, total, subtotal, iva, uuid_fiscal, fecha_timbrado, pdf_url, xml_url, pedidos!inner(fecha, sucursal_id, sucursales(nombre))')
+    .eq('estatus', 'timbrada')
+    .order('folio', { ascending: false });
+
+  if (suc)   q = q.eq('pedidos.sucursal_id', suc);
+  if (desde) q = q.gte('fecha_timbrado', `${desde}T00:00:00${OFFSET_MX}`);
+  if (hasta) q = q.lte('fecha_timbrado', `${hasta}T23:59:59${OFFSET_MX}`);
+  if (busca) q = q.or(`folio.eq.${busca},uuid_fiscal.ilike.%${busca}%`);
+
+  const { data, error } = await q;
+  if (error) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-msg">Error en la consulta: ${error.message}</div></div>`;
+    return;
+  }
+
+  FACTURAS_VISIBLES = data || [];
+  if (!FACTURAS_VISIBLES.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><div class="empty-msg">Sin facturas para esos filtros</div></div>';
+    return;
+  }
+
+  const suma    = FACTURAS_VISIBLES.reduce((a, f) => a + (+f.total || 0), 0);
+  const sinArch = FACTURAS_VISIBLES.filter(f => !f.pdf_url).length;
+
+  el.innerHTML = `
+    ${sinArch ? `<div class="alert alert-warn" style="margin-bottom:16px">
+        ⚠️ <b>${sinArch} factura${sinArch>1?'s':''} sin archivos guardados.</b>
+        El CFDI es válido y está en Facturapi; solo falta la copia local. Usa "Recuperar" para traerla.
+      </div>` : ''}
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${FACTURAS_VISIBLES.length} factura${FACTURAS_VISIBLES.length>1?'s':''}</div>
+        <div style="margin-left:auto" class="mono bold">Total: $${suma.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Factura</th><th>Sucursal</th><th>Timbrado</th><th>UUID</th>
+              <th style="text-align:right">Subtotal</th><th style="text-align:right">IVA</th>
+              <th style="text-align:right">Total</th><th style="text-align:center">Archivos</th>
+            </tr></thead>
+            <tbody>${FACTURAS_VISIBLES.map(f => `
+              <tr>
+                <td class="mono bold">${f.serie || ''} ${f.folio || ''}</td>
+                <td>${f.pedidos?.sucursales?.nombre || '—'}</td>
+                <td style="font-size:12px">${fmtFechaMx(f.fecha_timbrado, true)}</td>
+                <td class="mono" style="font-size:11px;color:var(--gray-500)" title="${f.uuid_fiscal || ''}">${(f.uuid_fiscal||'').slice(0,8)}…</td>
+                <td class="mono" style="text-align:right">$${(+f.subtotal).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                <td class="mono" style="text-align:right">$${(+f.iva).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                <td class="mono bold" style="text-align:right">$${(+f.total).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                <td style="text-align:center;white-space:nowrap">
+                  ${f.pdf_url
+                    ? `<button class="topbar-btn" onclick="descargarCFDI('${f.pdf_url}','${f.serie}-${f.folio}.pdf')">PDF</button>
+                       <button class="topbar-btn" onclick="descargarCFDI('${f.xml_url}','${f.serie}-${f.folio}.xml')">XML</button>`
+                    : `<button class="topbar-btn" onclick="recuperarArchivos('${f.id}')">↻ Recuperar</button>`}
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Trae de Facturapi los archivos de una factura ya timbrada que se quedó
+// sin copia en Storage. No re-timbra nada: el CFDI ya existe.
+async function recuperarArchivos(facturaId) {
+  const sesion = (await sb.auth.getSession()).data.session;
+  if (!sesion) { showToast('⚠️ Tu sesión expiró.'); return; }
+
+  showToast('Recuperando archivos...');
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/timbrar-factura`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + sesion.access_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ factura_id: facturaId, solo_archivos: true })
+    });
+    const res = await r.json();
+    if (!r.ok || !res.ok) { showToast('⚠️ ' + (res.error || 'No se pudieron recuperar')); return; }
+    showToast('✅ Archivos recuperados');
+    renderFacturasTimbradas();
+  } catch (e) {
+    showToast('⚠️ Falló la conexión: ' + e.message);
+  }
+}
+
+async function descargarZipPeriodo() {
+  if (!FACTURAS_VISIBLES.length) { showToast('⚠️ Primero busca facturas.'); return; }
+  if (typeof JSZip === 'undefined') { showToast('⚠️ No se pudo cargar el compresor. Revisa tu conexión.'); return; }
+
+  const conArchivo = FACTURAS_VISIBLES.filter(f => f.pdf_url);
+  if (!conArchivo.length) { showToast('⚠️ Ninguna de estas facturas tiene archivos guardados.'); return; }
+
+  const btn = document.getElementById('fx-btn-zip');
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparando...'; }
+
+  try {
+    const zip = new JSZip();
+    let listos = 0;
+
+    for (const f of conArchivo) {
+      const carpeta = zip.folder(f.pedidos?.sucursales?.nombre || 'Sin sucursal');
+      for (const [ruta, ext] of [[f.pdf_url,'pdf'], [f.xml_url,'xml']]) {
+        if (!ruta) continue;
+        try {
+          carpeta.file(`${f.serie}-${f.folio}.${ext}`, await bajarArchivoCFDI(ruta));
+        } catch (_) { /* archivo suelto faltante: no aborta el resto */ }
+      }
+      listos++;
+      if (btn) btn.textContent = `Preparando... ${listos}/${conArchivo.length}`;
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `CFDI_${document.getElementById('fx-desde').value}_a_${document.getElementById('fx-hasta').value}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`✅ ${listos} factura${listos>1?'s':''} en el ZIP`);
+  } catch (e) {
+    showToast('⚠️ No se pudo generar el ZIP: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬇ ZIP del periodo'; }
   }
 }
 
