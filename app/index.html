@@ -440,7 +440,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.11.1</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.11.2</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -2481,14 +2481,36 @@ async function bajarArchivoCFDI(ruta) {
   return data;
 }
 
+// Chrome materializa la descarga DESPUÉS del click, en otra vuelta del
+// event loop. Revocar el object URL en la misma vuelta mata el blob antes
+// de que termine de leerlo y deja un "Sin confirmar .crdownload" huérfano.
+function dispararDescarga(url, nombre, revocar) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { a.remove(); if (revocar) URL.revokeObjectURL(url); }, 60000);
+}
+
 async function descargarCFDI(ruta, nombre) {
   try {
-    const blob = await bajarArchivoCFDI(ruta);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = nombre;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    // Camino preferente: URL firmada. La descarga la resuelve el navegador
+    // contra el dominio HTTPS de Supabase, con Content-Disposition puesto
+    // por el servidor. No depende de que un blob siga vivo en memoria.
+    // Caduca en 2 minutos: alcanza para descargar, no para compartirse.
+    const { data, error } = await sb.storage
+      .from('facturas-cfdi')
+      .createSignedUrl(ruta, 120, { download: nombre });
+
+    if (!error && data?.signedUrl) {
+      dispararDescarga(data.signedUrl, nombre, false);
+      return;
+    }
+
+    // Respaldo: blob local, ya con la revocación diferida.
+    dispararDescarga(URL.createObjectURL(await bajarArchivoCFDI(ruta)), nombre, true);
   } catch (e) {
     showToast('⚠️ No se pudo descargar: ' + e.message);
   }
@@ -2723,12 +2745,11 @@ async function descargarZipPeriodo() {
     }
 
     const blob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `CFDI_${document.getElementById('fx-desde').value}_a_${document.getElementById('fx-hasta').value}.zip`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    dispararDescarga(
+      URL.createObjectURL(blob),
+      `CFDI_${document.getElementById('fx-desde').value}_a_${document.getElementById('fx-hasta').value}.zip`,
+      true
+    );
     showToast(`✅ ${listos} factura${listos>1?'s':''} en el ZIP`);
   } catch (e) {
     showToast('⚠️ No se pudo generar el ZIP: ' + e.message);
