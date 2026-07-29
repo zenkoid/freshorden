@@ -440,7 +440,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.11.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.11.1</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -502,9 +502,6 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
     </button>
     <button class="nav-item" onclick="showSection('facturas')">
       <span class="nav-icon">📄</span> Facturas Timbradas
-    </button>
-    <button class="nav-item" onclick="showSection('misfacturas')">
-      <span class="nav-icon">📄</span> Mis Facturas
     </button>
     <button class="nav-item" onclick="showSection('conciliacion')">
       <span class="nav-icon">💰</span> Conciliación
@@ -624,6 +621,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
         <button class="tab-btn" id="tab-btn-surtir" onclick="switchTab('tab-surtir','pedidos-tabs',this)">Surtir pedido</button>
         <button class="tab-btn" id="tab-btn-pedidosdel" onclick="switchTab('tab-pedidosdel','pedidos-tabs',this)">Pedidos del día</button>
         <button class="tab-btn" id="tab-btn-historial" onclick="switchTab('tab-historial','pedidos-tabs',this)">Historial</button>
+        <button class="tab-btn" id="tab-btn-misfacturas" onclick="switchTab('tab-misfacturas','pedidos-tabs',this)">Mis Facturas</button>
       </div>
 
       <!-- Tab: Nuevo pedido -->
@@ -774,6 +772,33 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
             </div>
             <div id="historial-table"></div>
           </div>
+        </div>
+      </div>
+
+      <!-- Tab: Mis Facturas (solo rol Sucursal) -->
+      <div class="tab-pane" id="tab-misfacturas" data-group="pedidos-tabs">
+        <div class="card" style="max-width:820px;margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">Facturas de mi sucursal</div>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Desde</label>
+                <input type="date" class="form-input" id="mf-desde">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Hasta</label>
+                <input type="date" class="form-input" id="mf-hasta">
+              </div>
+              <div class="form-group" style="display:flex;align-items:flex-end">
+                <button class="topbar-btn primary" onclick="renderMisFacturas()">Buscar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="mis-facturas-content">
+          <div class="empty-state"><div class="empty-msg">Elige un periodo y presiona Buscar</div></div>
         </div>
       </div>
     </div>
@@ -950,13 +975,6 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
           <div class="empty-icon">🧾</div>
           <div class="empty-msg">Cargando pedidos confirmados...</div>
         </div>
-      </div>
-    </div>
-
-    <!-- ===== MIS FACTURAS (Sucursal) ===== -->
-    <div class="section" id="section-misfacturas">
-      <div id="mis-facturas-content">
-        <div class="empty-state"><div class="empty-msg">Cargando...</div></div>
       </div>
     </div>
 
@@ -1422,7 +1440,7 @@ let currentUser = null;
 
 // Secciones visibles por rol en el sidebar
 const SECCIONES_POR_ROL = {
-  sucursal:    ['pedidos','misfacturas'],
+  sucursal:    ['pedidos'],  // Mis Facturas vive como pestaña dentro de Pedidos
   corporativo: ['pedidos','reportes'],
   bodega:      ['pedidos','recepcion'],
   gerencia:    ['dashboard','pedidos','recepcion','rutas','prefactura','facturas','conciliacion','leads','reportes'],
@@ -1470,6 +1488,11 @@ function applyRoleUI() {
   // ellos solo consultan vía Historial (rebautizado "Histórico de Pedidos")
   const tabPedidosDel = document.getElementById('tab-btn-pedidosdel');
   if (tabPedidosDel) tabPedidosDel.style.display = isAdminGerencia ? 'none' : '';
+
+  // Mis Facturas: exclusiva de Sucursal. Admin y Gerencia ya tienen la
+  // vista completa en "Facturas Timbradas"; Bodega no factura.
+  const tabMisFacturas = document.getElementById('tab-btn-misfacturas');
+  if (tabMisFacturas) tabMisFacturas.style.display = (currentUser.rol === 'sucursal') ? '' : 'none';
 
   if (isBodega) {
     const btnSurtir = document.getElementById('tab-btn-surtir');
@@ -1715,7 +1738,6 @@ const SECTION_META = {
   rutas:        { title:'Rutas y Tiendas', sub:'Configuración de rutas de distribución' },
   prefactura:   { title:'Pre-Factura', sub:'Generación de pre-facturas por tienda' },
   facturas:     { title:'Facturas Timbradas', sub:'Consulta y descarga de CFDI emitidos' },
-  misfacturas:  { title:'Mis Facturas', sub:'CFDI de tu sucursal — últimos 3 meses' },
   conciliacion: { title:'Conciliación', sub:'Facturas vs pagos' },
   reportes:     { title:'Reportes', sub:'Análisis de operación' },
   leads:        { title:'Leads', sub:'Solicitudes de información desde la Landing Page' },
@@ -1745,7 +1767,6 @@ function showSection(id) {
   }
   if (id==='prefactura') renderPreFactura();
   if (id==='facturas')    initFacturasTimbradas();
-  if (id==='misfacturas') renderMisFacturas();
   if (id==='leads') cargarLeads();
   if (id==='excepciones') cargarExcepciones();
 }
@@ -1762,6 +1783,7 @@ function switchTab(tabId, group, btn) {
   if(tabId==='tab-surtir') renderSurtirPedidos();
   if(tabId==='tab-pedidosdel') { renderPedidosDelDia(); renderResumenSalidas(); }
   if(tabId==='tab-historial') renderHistorial();
+  if(tabId==='tab-misfacturas') initMisFacturas();
 }
 
 // ============================================================
@@ -2472,7 +2494,20 @@ async function descargarCFDI(ruta, nombre) {
   }
 }
 
-// ── Vista de sucursal: últimos 3 meses, solo PDF ──
+// ── Vista de sucursal: consulta por periodo, solo PDF ──
+//
+// Vive como pestaña dentro de Pedidos, no en el sidebar: el rol Sucursal
+// tiene el sidebar oculto por diseño, así que una sección lateral era
+// inalcanzable para el único rol que la necesitaba.
+function initMisFacturas() {
+  const desde = document.getElementById('mf-desde');
+  const hasta = document.getElementById('mf-hasta');
+  // Arranca en el mes en curso: es el corte que la sucursal revisa a diario.
+  if (desde && !desde.value) desde.value = hoyMx().slice(0, 8) + '01';
+  if (hasta && !hasta.value) hasta.value = hoyMx();
+  renderMisFacturas();
+}
+
 async function renderMisFacturas() {
   const el = document.getElementById('mis-facturas-content');
   if (!el) return;
@@ -2480,18 +2515,24 @@ async function renderMisFacturas() {
     el.innerHTML = '<div class="empty-state"><div class="empty-msg">Tu usuario no tiene sucursal asignada.</div></div>';
     return;
   }
-  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
+  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Buscando...</div></div>';
 
-  const desde = new Date();
-  desde.setMonth(desde.getMonth() - 3);
+  const desde = document.getElementById('mf-desde')?.value || '';
+  const hasta = document.getElementById('mf-hasta')?.value || '';
 
-  const { data, error } = await sb
+  // El filtro por sucursal es comodidad, no seguridad: la RLS de
+  // facturas_cfdi y la política de Storage son las que mandan.
+  let q = sb
     .from('facturas_cfdi')
     .select('id, serie, folio, total, fecha_timbrado, pdf_url, pedidos!inner(fecha, sucursal_id)')
     .eq('estatus', 'timbrada')
     .eq('pedidos.sucursal_id', currentUser.tiendaId)
-    .gte('fecha_timbrado', desde.toISOString())
     .order('fecha_timbrado', { ascending: false });
+
+  if (desde) q = q.gte('fecha_timbrado', `${desde}T00:00:00${OFFSET_MX}`);
+  if (hasta) q = q.lte('fecha_timbrado', `${hasta}T23:59:59${OFFSET_MX}`);
+
+  const { data, error } = await q;
 
   if (error) {
     el.innerHTML = `<div class="empty-state"><div class="empty-msg">No se pudieron cargar tus facturas: ${error.message}</div></div>`;
@@ -2500,13 +2541,18 @@ async function renderMisFacturas() {
 
   const rows = data || [];
   if (!rows.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><div class="empty-msg">No tienes facturas timbradas en los últimos 3 meses</div></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><div class="empty-msg">No hay facturas timbradas en ese periodo</div></div>';
     return;
   }
 
+  const suma = rows.reduce((a, f) => a + (+f.total || 0), 0);
+
   el.innerHTML = `
     <div class="card" style="max-width:820px">
-      <div class="card-header"><div class="card-title">${rows.length} factura${rows.length>1?'s':''} — últimos 3 meses</div></div>
+      <div class="card-header">
+        <div class="card-title">${rows.length} factura${rows.length>1?'s':''}</div>
+        <div style="margin-left:auto" class="mono bold">Total: $${suma.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+      </div>
       <div class="card-body" style="padding:0">
         <div class="table-wrap">
           <table>
