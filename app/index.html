@@ -220,6 +220,50 @@ td.bold { font-weight: 600; color: var(--gray-900); }
   min-width: 120px;
 }
 .form-input:focus, .form-select:focus { border-color: var(--green-mid); }
+
+/* Selector múltiple de productos (Historial) — <details> para que abra
+   y cierre sin JS; el panel flota para no empujar la fila de filtros. */
+.ms { position: relative; }
+.ms > .ms-sum {
+  padding: 7px 24px 7px 10px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-family: var(--font); font-size: 13px; color: var(--gray-900);
+  background: var(--white);
+  min-width: 150px; cursor: pointer; list-style: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  position: relative;
+}
+.ms > .ms-sum::-webkit-details-marker { display: none; }
+.ms > .ms-sum::after {
+  content: '\25BE'; position: absolute; right: 9px; top: 50%;
+  transform: translateY(-50%); color: var(--gray-500); font-size: 11px;
+}
+.ms[open] > .ms-sum { border-color: var(--green-mid); }
+.ms-panel {
+  position: absolute; z-index: 60; top: calc(100% + 4px); left: 0;
+  min-width: 210px; max-height: 280px; overflow-y: auto;
+  background: var(--white); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm); padding: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+.ms-acciones {
+  display: flex; gap: 10px; padding: 2px 6px 8px;
+  border-bottom: 1px solid var(--gray-100); margin-bottom: 4px;
+}
+.ms-link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-family: var(--font); font-size: 11px; color: var(--green-mid);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.ms-link:hover { text-decoration: underline; }
+.ms-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px; font-size: 13px; color: var(--gray-900);
+  cursor: pointer; border-radius: 4px; white-space: nowrap;
+}
+.ms-opt:hover { background: var(--gray-50); }
+.ms-opt input { margin: 0; cursor: pointer; }
 .form-input[type="number"] { font-family: var(--mono); }
 
 /* PRODUCT ICONS */
@@ -440,7 +484,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.11.3</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.12.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -734,8 +778,12 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
           <div class="card-body">
             <div class="form-row">
               <div class="form-group" id="hist-fecha-group">
-                <label class="form-label">Fecha</label>
-                <input type="date" class="form-input" id="hist-fecha" onchange="renderHistorial()">
+                <label class="form-label">Desde</label>
+                <input type="date" class="form-input" id="hist-desde" onchange="renderHistorial()">
+              </div>
+              <div class="form-group" id="hist-hasta-group">
+                <label class="form-label">Hasta</label>
+                <input type="date" class="form-input" id="hist-hasta" onchange="renderHistorial()">
               </div>
               <div class="form-group" id="hist-mes-group" style="display:none">
                 <label class="form-label">Mes</label>
@@ -752,10 +800,17 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label">Producto</label>
-                <select class="form-select" id="hist-prod" onchange="renderHistorial()">
-                  <option value="">Todos</option>
-                </select>
+                <label class="form-label">Productos</label>
+                <details class="ms" id="hist-prod-ms">
+                  <summary class="ms-sum" id="hist-prod-sum">Todos</summary>
+                  <div class="ms-panel">
+                    <div class="ms-acciones">
+                      <button type="button" class="ms-link" onclick="histProdTodos(true)">Todos</button>
+                      <button type="button" class="ms-link" onclick="histProdTodos(false)">Ninguno</button>
+                    </div>
+                    <div id="hist-prod-panel"></div>
+                  </div>
+                </details>
               </div>
               <div class="form-group">
                 <label class="form-label">Status</label>
@@ -1533,6 +1588,8 @@ function applyRoleUI() {
   const histFechaGroup = document.getElementById('hist-fecha-group');
   const histMesGroup = document.getElementById('hist-mes-group');
   if (histFechaGroup) histFechaGroup.style.display = isSucursal ? 'none' : '';
+  const histHastaGroup = document.getElementById('hist-hasta-group');
+  if (histHastaGroup) histHastaGroup.style.display = isSucursal ? 'none' : '';
   if (histMesGroup) histMesGroup.style.display = isSucursal ? '' : 'none';
   if (subtitleEl) {
     subtitleEl.style.fontSize = isSucursal ? '18px' : '';
@@ -1644,8 +1701,12 @@ function init() {
   // Set dates
   const today = fechaNegocioHoy();
   document.getElementById('rec-fecha').value = today;
-  const histFechaInput = document.getElementById('hist-fecha');
-  if (histFechaInput) histFechaInput.value = today;
+  // El rango arranca en el mes en curso: es el corte que Admin revisa
+  // a diario, y evita traer meses enteros de pedidos sin pedirlo.
+  const histDesde = document.getElementById('hist-desde');
+  const histHasta = document.getElementById('hist-hasta');
+  if (histDesde) histDesde.value = today.slice(0, 8) + '01';
+  if (histHasta) histHasta.value = today;
   const f = new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
   document.getElementById('fecha-sidebar').textContent = f.charAt(0).toUpperCase()+f.slice(1);
   document.getElementById('ped-fecha-display').value = f.charAt(0).toUpperCase()+f.slice(1);
@@ -1663,14 +1724,16 @@ function init() {
     });
   });
 
-  // Populate filtro de producto en Historial
-  const histProdSel = document.getElementById('hist-prod');
-  if (histProdSel) {
-    PRODUCTS.forEach(p => {
-      const o = document.createElement('option');
-      o.value = p.id; o.textContent = p.name;
-      histProdSel.appendChild(o);
-    });
+  // Filtro de productos del Historial: casillas, no lista desplegable.
+  // Permite aislar los productos de un mismo proveedor y leer el
+  // histórico como si fuera una vista por proveedor.
+  const histProdPanel = document.getElementById('hist-prod-panel');
+  if (histProdPanel) {
+    histProdPanel.innerHTML = PRODUCTS.map(p => `
+      <label class="ms-opt">
+        <input type="checkbox" value="${p.id}" onchange="histProdCambio()">
+        <span>${p.icon || ''} ${p.name}</span>
+      </label>`).join('');
   }
 
   // Logo del card de pedido (reutiliza la imagen ya embebida, sin duplicarla)
@@ -2798,10 +2861,42 @@ function renderConciliaciones() {
 // ============================================================
 // HISTORIAL
 // ============================================================
+// ── Selector múltiple de productos ──────────────────────────
+// Sin ninguna casilla marcada equivale a "todos": es el estado
+// inicial y el que espera quien solo quiere ver el histórico.
+function histProdSeleccionados() {
+  const panel = document.getElementById('hist-prod-panel');
+  if (!panel) return [];
+  return [...panel.querySelectorAll('input:checked')].map(i => i.value);
+}
+
+function histProdCambio() {
+  const sel = histProdSeleccionados();
+  const sum = document.getElementById('hist-prod-sum');
+  if (sum) {
+    if (!sel.length) sum.textContent = 'Todos';
+    else if (sel.length === 1) {
+      const p = PRODUCTS_ALL.find(x => x.id === sel[0]);
+      sum.textContent = p ? p.name : '1 producto';
+    } else sum.textContent = `${sel.length} productos`;
+  }
+  renderHistorial();
+}
+
+function histProdTodos(marcar) {
+  const panel = document.getElementById('hist-prod-panel');
+  if (!panel) return;
+  panel.querySelectorAll('input').forEach(i => { i.checked = marcar; });
+  histProdCambio();
+}
+
+// ============================================================
+// HISTORIAL
+// ============================================================
 async function renderHistorial() {
   const el = document.getElementById('historial-table');
   if (!currentUser) return;
-  const prodFilter = document.getElementById('hist-prod').value;
+  const prodSel = histProdSeleccionados();
   const estatusFilterEl = document.getElementById('hist-estatus');
   const estatusFilter = estatusFilterEl ? estatusFilterEl.value : '';
   const tiendaFilterEl = document.getElementById('hist-tienda');
@@ -2811,6 +2906,7 @@ async function renderHistorial() {
   let query = sb
     .from('pedidos')
     .select('id, fecha, estatus, sucursal_id, sucursales(nombre), pedido_detalle(producto_id, cant_solicitada, cant_surtida, precio_unitario, importe_solicitado, importe_surtido, unidad_aplicada)')
+    .order('fecha', { ascending: false })
     .order('creado_en', { ascending: false });
 
   if (estatusFilter) query = query.eq('estatus', estatusFilter);
@@ -2830,50 +2926,80 @@ async function renderHistorial() {
   } else {
     if (tiendaFilter) query = query.eq('sucursal_id', tiendaFilter);
 
-    // Filtro por fecha exacta (día por día) para Bodega/Admin/Gerencia
-    const fechaEl = document.getElementById('hist-fecha');
-    const fechaVal = fechaEl ? fechaEl.value : '';
-    if (fechaVal) query = query.eq('fecha', fechaVal);
+    // Rango de fechas para Bodega/Admin/Gerencia. Cada extremo es
+    // independiente: dejar uno vacío deja ese lado abierto.
+    const desde = document.getElementById('hist-desde')?.value || '';
+    const hasta = document.getElementById('hist-hasta')?.value || '';
+    if (desde && hasta && desde > hasta) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-msg">La fecha inicial es posterior a la final</div></div>';
+      return;
+    }
+    if (desde) query = query.gte('fecha', desde);
+    if (hasta) query = query.lte('fecha', hasta);
   }
 
   const { data, error } = await query;
   if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando historial</div></div>'; return; }
 
   let rows = data || [];
-  if (prodFilter) {
-    rows = rows.filter(r => (r.pedido_detalle || []).some(d => d.producto_id === prodFilter && d.cant_solicitada > 0));
+  if (prodSel.length) {
+    rows = rows.filter(r => (r.pedido_detalle || [])
+      .some(d => prodSel.includes(d.producto_id) && d.cant_solicitada > 0));
   }
 
   if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Sin pedidos para los filtros seleccionados</div></div>'; return; }
+
+  // El total acumulado respeta el filtro de productos: al aislar los
+  // productos de un proveedor, la suma es la de ese proveedor.
+  let granTotal = 0;
+
+  const cuerpo = rows.map(r => {
+    const est = ESTADOS_PEDIDO[r.estatus] || ESTADOS_PEDIDO.capturado;
+    let detalle = (r.pedido_detalle || []).filter(d => d.cant_solicitada > 0);
+    if (prodSel.length) detalle = detalle.filter(d => prodSel.includes(d.producto_id));
+    // importe_solicitado e importe_surtido son GENERATED ALWAYS:
+    // Postgres las calcula solas y no pueden desincronizarse.
+    const yaSurtido = ESTATUS_YA_SURTIDO.includes(r.estatus);
+    const total = detalle.reduce((s,d) =>
+      s + (+(yaSurtido ? d.importe_surtido : d.importe_solicitado) || 0), 0);
+    // Los cancelados no suman: siguen visibles como registro, pero
+    // incluirlos inflaría el acumulado que se usa para conciliar.
+    if (r.estatus !== 'cancelado') granTotal += total;
+    const listado = detalle.map(d => {
+      const p = PRODUCTS_ALL.find(x => x.id === d.producto_id);
+      if (!p) return '';
+      const unidad = d.unidad_aplicada || p.unit;
+      return `${p.icon} ${celdaCantidad(r.estatus, d.cant_solicitada, d.cant_surtida, unidad)}`;
+    }).filter(Boolean).join(', ');
+    return `<tr>
+      <td class="mono" style="font-size:11px">${r.fecha}</td>
+      <td class="bold">${r.sucursales?.nombre || '—'}</td>
+      <td><span class="badge ${est.cls}">${est.label}</span></td>
+      <td style="font-size:12px">${listado || '—'}</td>
+      <td class="mono bold" style="color:var(--green)">$${total.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>`;
+  }).join('');
+
+  const canceladas = rows.filter(r => r.estatus === 'cancelado').length;
+  const nota = canceladas
+    ? ` · ${canceladas} cancelado${canceladas>1?'s':''} no suma${canceladas>1?'n':''}`
+    : '';
 
   el.innerHTML = `
     <div class="table-wrap">
       <table>
         <thead><tr><th>Fecha</th><th>Tienda</th><th>Estatus</th><th>Productos</th><th>Total</th></tr></thead>
-        <tbody>${rows.map(r => {
-          const est = ESTADOS_PEDIDO[r.estatus] || ESTADOS_PEDIDO.capturado;
-          let detalle = (r.pedido_detalle || []).filter(d => d.cant_solicitada > 0);
-          if (prodFilter) detalle = detalle.filter(d => d.producto_id === prodFilter);
-          // importe_solicitado e importe_surtido son GENERATED ALWAYS:
-          // Postgres las calcula solas y no pueden desincronizarse.
-          const yaSurtido = ESTATUS_YA_SURTIDO.includes(r.estatus);
-          const total = detalle.reduce((s,d) =>
-            s + (+(yaSurtido ? d.importe_surtido : d.importe_solicitado) || 0), 0);
-          const listado = detalle.map(d => {
-            const p = PRODUCTS_ALL.find(x => x.id === d.producto_id);
-            if (!p) return '';
-            const unidad = d.unidad_aplicada || p.unit;
-            return `${p.icon} ${celdaCantidad(r.estatus, d.cant_solicitada, d.cant_surtida, unidad)}`;
-          }).filter(Boolean).join(', ');
-          return `<tr>
-            <td class="mono" style="font-size:11px">${r.fecha}</td>
-            <td class="bold">${r.sucursales?.nombre || '—'}</td>
-            <td><span class="badge ${est.cls}">${est.label}</span></td>
-            <td style="font-size:12px">${listado || '—'}</td>
-            <td class="mono bold" style="color:var(--green)">$${total.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-          </tr>`;
-        }).join('')}
-        </tbody>
+        <tbody>${cuerpo}</tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--gray-200);background:var(--gray-50)">
+            <td colspan="4" class="bold" style="text-align:right;padding-right:14px">
+              ${rows.length} pedido${rows.length>1?'s':''}${nota} &nbsp;·&nbsp; Total acumulado
+            </td>
+            <td class="mono bold" style="color:var(--green);font-size:14px">
+              $${granTotal.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </div>`;
 }
