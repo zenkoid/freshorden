@@ -452,15 +452,27 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
   .app { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
   .sidebar {
     width: 100%; min-width: 0;
-    flex-direction: row; align-items: center;
+    flex-direction: row; align-items: center; flex-wrap: wrap;
     border-right: none; border-bottom: 1px solid var(--gray-100);
-    overflow-x: auto;
+    overflow-x: visible;
   }
-  .sidebar-logo { border-bottom: none; border-right: 1px solid var(--gray-100); padding: 10px 14px; flex-shrink: 0; }
-  .nav { display: flex; flex: none; padding: 6px 8px; gap: 2px; overflow-x: auto; }
+  .sidebar-logo {
+    width: 100%; box-sizing: border-box;
+    border-right: none; border-bottom: 1px solid var(--gray-100);
+    padding: 10px 14px;
+  }
+  .nav {
+    display: flex; flex: 1 1 100%; flex-wrap: wrap;
+    padding: 8px; gap: 4px; overflow-x: visible;
+  }
   .nav-section-label { display: none; }
   .nav-item { white-space: nowrap; width: auto; }
-  .sidebar-footer { display: none; }
+  .sidebar-footer {
+    display: flex; flex: 1 1 100%; align-items: center;
+    flex-wrap: wrap; gap: 4px 12px;
+    padding: 8px 14px;
+  }
+  .sidebar-footer > div { margin: 0 !important; }
   .main { min-height: 100vh; }
   .content { padding: 16px; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
