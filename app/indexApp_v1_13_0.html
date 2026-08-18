@@ -496,7 +496,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.13.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace;pointer-events:none">v1.13.1</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -4061,13 +4061,22 @@ function showToast(msg) {
       box-shadow:0 4px 20px rgba(0,0,0,0.3);
       transition:opacity 0.3s;
       max-width:320px;
+      pointer-events:none;
     `;
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
   toast.style.opacity = '1';
   clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+  toast.style.visibility = 'visible';
+  clearTimeout(toast._hide);
+  // Con opacity 0 el div seguia en su lugar interceptando toques. En
+  // celular mide casi todo el ancho de la pantalla y quedaba encima
+  // del boton de guardar: el boton se veia activo y no respondia.
+  toast._timer = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast._hide = setTimeout(() => { toast.style.visibility = 'hidden'; }, 350);
+  }, 3500);
 }
 
 // ============================================================
