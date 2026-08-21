@@ -452,15 +452,27 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
   .app { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
   .sidebar {
     width: 100%; min-width: 0;
-    flex-direction: row; align-items: center;
+    flex-direction: row; align-items: center; flex-wrap: wrap;
     border-right: none; border-bottom: 1px solid var(--gray-100);
-    overflow-x: auto;
+    overflow-x: visible;
   }
-  .sidebar-logo { border-bottom: none; border-right: 1px solid var(--gray-100); padding: 10px 14px; flex-shrink: 0; }
-  .nav { display: flex; flex: none; padding: 6px 8px; gap: 2px; overflow-x: auto; }
+  .sidebar-logo {
+    width: 100%; box-sizing: border-box;
+    border-right: none; border-bottom: 1px solid var(--gray-100);
+    padding: 10px 14px;
+  }
+  .nav {
+    display: flex; flex: 1 1 100%; flex-wrap: wrap;
+    padding: 8px; gap: 4px; overflow-x: visible;
+  }
   .nav-section-label { display: none; }
   .nav-item { white-space: nowrap; width: auto; }
-  .sidebar-footer { display: none; }
+  .sidebar-footer {
+    display: flex; flex: 1 1 100%; align-items: center;
+    flex-wrap: wrap; gap: 4px 12px;
+    padding: 8px 14px;
+  }
+  .sidebar-footer > div { margin: 0 !important; }
   .main { min-height: 100vh; }
   .content { padding: 16px; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
@@ -484,7 +496,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace">v1.12.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace;pointer-events:none">v1.15.0</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -582,7 +594,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
       </div>
     </div>
     <div class="topbar-spacer"></div>
-    <button class="topbar-btn" id="btn-recibir-producto" onclick="showModal('modal-proveedor')">+ Recibir Producto</button>
+    <button class="topbar-btn" id="btn-recibir-producto" onclick="showSection('recepcion')">+ Recibir Producto</button>
     <button class="topbar-btn primary" id="btn-nuevo-pedido-top" onclick="showSection('pedidos')">Nuevo Pedido</button>
     </div>
 
@@ -860,97 +872,149 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 
     <!-- ===== RECEPCION BODEGA ===== -->
     <div class="section" id="section-recepcion">
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Registrar recepción de proveedor</div>
-          </div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('tab-rec-captura','rec-tabs',this)">Capturar nota</button>
+        <button class="tab-btn" onclick="switchTab('tab-rec-historial','rec-tabs',this)">Recepciones</button>
+        <button class="tab-btn" onclick="switchTab('tab-rec-mermas','rec-tabs',this)">Mermas y reclamos</button>
+        <button class="tab-btn" onclick="switchTab('tab-rec-existencias','rec-tabs',this)">Existencias</button>
+      </div>
+
+      <!-- ---- CAPTURA (disenada para celular: una sola columna) ---- -->
+      <div class="tab-pane active" id="tab-rec-captura" data-group="rec-tabs">
+        <div class="card" style="max-width:560px">
+          <div class="card-header"><div class="card-title">Nueva recepcion</div></div>
           <div class="card-body">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Fecha</label>
-                <input type="date" class="form-input" id="rec-fecha">
+
+            <div class="form-group" style="width:100%;margin-bottom:14px">
+              <label class="form-label">Proveedor</label>
+              <select class="form-select" id="rec-proveedor" style="width:100%" onchange="recCambioProveedor()">
+                <option value="">Selecciona...</option>
+              </select>
+            </div>
+
+            <div class="form-group" style="width:100%;margin-bottom:14px">
+              <label class="form-label">Fecha de la nota</label>
+              <input type="date" class="form-input" id="rec-fecha" style="width:100%">
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+              <input type="checkbox" id="rec-sin-nota" onchange="recToggleSinNota()" style="width:18px;height:18px">
+              <label for="rec-sin-nota" style="font-size:13px;color:var(--gray-700)">Compra sin nota de remision</label>
+            </div>
+
+            <div class="form-group" style="width:100%;margin-bottom:18px" id="rec-folio-wrap">
+              <label class="form-label">Folio de la nota</label>
+              <input type="text" class="form-input" id="rec-folio" style="width:100%" inputmode="numeric" placeholder="1900">
+            </div>
+
+            <div style="border-top:0.5px solid var(--gray-200);padding-top:14px;margin-bottom:8px">
+              <div style="font-size:12px;font-weight:600;color:var(--gray-700);text-transform:uppercase;letter-spacing:.4px">Productos</div>
+            </div>
+
+            <div id="rec-renglones"></div>
+
+            <button class="topbar-btn" style="width:100%;margin-bottom:18px" onclick="recAddRenglon()">+ Agregar producto</button>
+
+            <div class="form-group" style="width:100%;margin-bottom:8px">
+              <label class="form-label">Importe total escrito en la nota</label>
+              <input type="number" class="form-input" id="rec-importe-nota" style="width:100%" inputmode="decimal" step="0.01" placeholder="0.00" oninput="recRecalcTotal()">
+            </div>
+            <div id="rec-cuadre" style="font-size:12px;margin-bottom:18px;color:var(--gray-500)">Suma capturada: $0.00</div>
+
+            <div class="form-group" style="width:100%;margin-bottom:14px">
+              <label class="form-label">Foto de la nota</label>
+              <input type="file" class="form-input" id="rec-foto" accept="image/*" style="width:100%;padding:8px">
+            </div>
+
+            <div class="form-group" style="width:100%;margin-bottom:18px">
+              <label class="form-label">Observaciones</label>
+              <textarea class="form-input" id="rec-notas" rows="2" style="width:100%;resize:vertical"></textarea>
+            </div>
+
+            <button class="topbar-btn primary" style="width:100%" id="btn-guardar-recepcion" onclick="guardarRecepcion()">Guardar recepcion</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- HISTORIAL ---- -->
+      <div class="tab-pane" id="tab-rec-historial" data-group="rec-tabs">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Recepciones registradas</div></div>
+          <div class="card-body" style="padding:0">
+            <div id="recepciones-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- MERMAS Y RECLAMOS ---- -->
+      <div class="tab-pane" id="tab-rec-mermas" data-group="rec-tabs">
+        <div class="card" style="max-width:560px;margin-bottom:18px">
+          <div class="card-header"><div class="card-title">Registrar merma</div></div>
+          <div class="card-body">
+
+            <div class="form-group" style="width:100%;margin-bottom:14px">
+              <label class="form-label">Producto</label>
+              <select class="form-select" id="mer-producto" style="width:100%"></select>
+            </div>
+
+            <div class="form-group" style="width:100%;margin-bottom:14px">
+              <label class="form-label">Cantidad perdida</label>
+              <input type="number" class="form-input" id="mer-cantidad" style="width:100%" inputmode="decimal" min="0" step="0.01">
+            </div>
+
+            <div class="form-group" style="width:100%;margin-bottom:14px">
+              <label class="form-label">Motivo de la merma</label>
+              <select class="form-select" id="mer-clasificacion" style="width:100%" onchange="merToggleReclamo()">
+                <option value="deterioro">Se echo a perder en bodega</option>
+                <option value="reclamo_proveedor">Llego mal — se reclama al proveedor</option>
+                <option value="robo_extravio">Robo o extravio</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+
+            <div id="mer-reclamo-wrap" style="display:none">
+              <div class="form-group" style="width:100%;margin-bottom:14px">
+                <label class="form-label">Proveedor a quien se reclama</label>
+                <select class="form-select" id="mer-proveedor" style="width:100%" onchange="merCargarNotas()">
+                  <option value="">Selecciona...</option>
+                </select>
               </div>
-              <div class="form-group">
-                <label class="form-label">Proveedor</label>
-                <select class="form-select" id="rec-proveedor">
-                  <option>Proveedor Jitomate</option>
-                  <option>Proveedor Lechuga</option>
-                  <option>Proveedor Cebolla</option>
-                  <option>Proveedor Guantes</option>
+              <div class="form-group" style="width:100%;margin-bottom:14px">
+                <label class="form-label">Nota de donde vino (opcional)</label>
+                <select class="form-select" id="mer-recepcion" style="width:100%">
+                  <option value="">Sin especificar</option>
                 </select>
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Producto</label>
-                <select class="form-select" id="rec-producto">
-                  <option>🍅 Jitomate</option>
-                  <option>🥬 Lechuga Iceberg</option>
-                  <option>🧅 Cebolla Blanca</option>
-                  <option>🟣 Cebolla Morada</option>
-                  <option>🧤 Guantes Nitrilo</option>
-                </select>
-              </div>
+
+            <div class="form-group" style="width:100%;margin-bottom:18px">
+              <label class="form-label">Descripcion</label>
+              <textarea class="form-input" id="mer-motivo" rows="2" style="width:100%;resize:vertical" placeholder="Que paso"></textarea>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Cajas recibidas</label>
-                <input type="number" class="form-input" id="rec-cajas" placeholder="0" min="0">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Kilos brutos</label>
-                <input type="number" class="form-input" id="rec-kg-bruto" placeholder="0" min="0">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Kilos netos</label>
-                <input type="number" class="form-input" id="rec-kg-neto" placeholder="0" min="0">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Cajas mal estado</label>
-                <input type="number" class="form-input" id="rec-malos" placeholder="0" min="0">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Faltantes</label>
-                <input type="number" class="form-input" id="rec-faltantes" placeholder="0" min="0">
-              </div>
-              <div class="form-group" style="flex:1">
-                <label class="form-label">Reposición solicitada</label>
-                <select class="form-select" id="rec-repos">
-                  <option value="no">No</option>
-                  <option value="si">Sí — pendiente</option>
-                  <option value="recibida">Sí — ya recibida</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-group" style="width:100%;margin-bottom:16px">
-              <label class="form-label">Notas</label>
-              <textarea class="form-input" id="rec-notas" rows="2" style="resize:vertical;width:100%"></textarea>
-            </div>
-            <button class="topbar-btn primary" style="width:100%" onclick="saveRecepcion()">Guardar recepción</button>
+
+            <div id="mer-aviso" style="font-size:12px;color:var(--gray-500);margin-bottom:14px"></div>
+
+            <button class="topbar-btn primary" style="width:100%" id="btn-guardar-merma" onclick="guardarMerma()">Registrar merma</button>
           </div>
         </div>
 
-        <div>
-          <div class="card" style="margin-bottom:16px">
-            <div class="card-header">
-              <div class="card-title">Recepciones recientes</div>
-            </div>
-            <div class="card-body" style="padding:0">
-              <div id="recepciones-list"></div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">Repociones pendientes</div>
-            </div>
-            <div class="card-body">
-              <div id="reposiciones-list">
-                <div class="alert alert-warn">⚠️ Sin reposiciones activas registradas</div>
-              </div>
-            </div>
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-header"><div class="card-title">Reclamos a proveedores</div></div>
+          <div class="card-body" style="padding:0"><div id="reclamos-wrap"></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><div class="card-title">Mermas registradas</div></div>
+          <div class="card-body" style="padding:0"><div id="mermas-wrap"></div></div>
+        </div>
+      </div>
+
+      <!-- ---- EXISTENCIAS ---- -->
+      <div class="tab-pane" id="tab-rec-existencias" data-group="rec-tabs">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Existencia por producto</div></div>
+          <div class="card-body" style="padding:0">
+            <div id="existencias-wrap"></div>
           </div>
         </div>
       </div>
@@ -1328,56 +1392,6 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 </main>
 </div><!-- /app -->
 
-<!-- MODAL: Recibir proveedor -->
-<div class="modal-overlay" id="modal-proveedor">
-  <div class="modal">
-    <div class="modal-header">
-      <div class="modal-title">Recepción rápida de proveedor</div>
-      <button class="modal-close" onclick="closeModal('modal-proveedor')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Producto</label>
-          <select class="form-select" id="qrec-prod">
-            <option>🍅 Jitomate</option>
-            <option>🥬 Lechuga Iceberg</option>
-            <option>🧅 Cebolla Blanca</option>
-            <option>🟣 Cebolla Morada</option>
-            <option>🧤 Guantes Nitrilo</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Cajas</label>
-          <input type="number" class="form-input" id="qrec-cajas" placeholder="0">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Kilos netos</label>
-          <input type="number" class="form-input" id="qrec-kg" placeholder="0">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">¿Faltantes o mal estado?</label>
-          <input type="number" class="form-input" id="qrec-faltantes" placeholder="0">
-        </div>
-        <div class="form-group" style="flex:1">
-          <label class="form-label">¿Solicitar reposición?</label>
-          <select class="form-select" id="qrec-repos">
-            <option value="no">No</option>
-            <option value="si">Sí</option>
-          </select>
-        </div>
-      </div>
-      <div class="alert alert-info" style="margin-top:4px">ℹ️ La recepción se registra sin inventario permanente. El control es por despacho diario.</div>
-    </div>
-    <div class="modal-footer">
-      <button class="topbar-btn" onclick="closeModal('modal-proveedor')">Cancelar</button>
-      <button class="topbar-btn primary" onclick="quickRecepcion()">Registrar</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL: Pedido guardado -->
 <div class="modal-overlay" id="modal-pedido-ok">
   <div class="modal">
@@ -1750,7 +1764,6 @@ function init() {
   renderHoyRutas();
   renderConciliaciones();
   renderDashboardPedidos();
-  renderRecepciones();
   renderTopTiendas();
   renderReporteTiendas();
   updatePedidoBadge();
@@ -1797,7 +1810,7 @@ function getInput(prodId) {
 const SECTION_META = {
   dashboard:    { title:'Dashboard', sub:'Resumen operativo del día' },
   pedidos:      { title:'Pedidos del Día', sub:'Captura y seguimiento de pedidos' },
-  recepcion:    { title:'Recepción Bodega', sub:'Registro de entradas de proveedor' },
+  recepcion:    { title:'Recepción Bodega', sub:'Notas de remisión, inventario y existencias' },
   rutas:        { title:'Rutas y Tiendas', sub:'Configuración de rutas de distribución' },
   prefactura:   { title:'Pre-Factura', sub:'Generación de pre-facturas por tienda' },
   facturas:     { title:'Facturas Timbradas', sub:'Consulta y descarga de CFDI emitidos' },
@@ -1832,6 +1845,7 @@ function showSection(id) {
   if (id==='facturas')    initFacturasTimbradas();
   if (id==='leads') cargarLeads();
   if (id==='excepciones') cargarExcepciones();
+  if (id==='recepcion')   initRecepcion();
 }
 
 function switchTab(tabId, group, btn) {
@@ -1847,6 +1861,10 @@ function switchTab(tabId, group, btn) {
   if(tabId==='tab-pedidosdel') { renderPedidosDelDia(); renderResumenSalidas(); }
   if(tabId==='tab-historial') renderHistorial();
   if(tabId==='tab-misfacturas') initMisFacturas();
+  if(tabId==='tab-rec-captura')     initRecepcion();
+  if(tabId==='tab-rec-historial')   cargarRecepciones();
+  if(tabId==='tab-rec-mermas')      initMermas();
+  if(tabId==='tab-rec-existencias') cargarExistencias();
 }
 
 // ============================================================
@@ -2211,47 +2229,639 @@ async function confirmarSurtido() {
 function exportResumen() { alert('En producción: genera un PDF/Excel con el resumen del día para enviar al staff corporativo.'); }
 
 // ============================================================
-// RECEPCION
+// RECEPCION, INVENTARIO Y MERMAS  (Etapa 2 - modulo B)
 // ============================================================
-function saveRecepcion() {
-  const rec = {
-    fecha: document.getElementById('rec-fecha').value,
-    proveedor: document.getElementById('rec-proveedor').value,
-    producto: document.getElementById('rec-producto').value,
-    cajas: +document.getElementById('rec-cajas').value||0,
-    kgBruto: +document.getElementById('rec-kg-bruto').value||0,
-    kgNeto: +document.getElementById('rec-kg-neto').value||0,
-    malos: +document.getElementById('rec-malos').value||0,
-    faltantes: +document.getElementById('rec-faltantes').value||0,
-    repos: document.getElementById('rec-repos').value,
-    notas: document.getElementById('rec-notas').value,
-    creadoEn: new Date().toISOString()
-  };
-  recepciones.unshift(rec);
-  renderRecepciones();
-  alert('✅ Recepción guardada correctamente');
+// El documento primario es la NOTA DE REMISION, no la factura:
+// la mercancia y la foto de la nota llegan por WhatsApp dias antes
+// del CFDI. Por eso la recepcion se captura sola y la factura se
+// aparea despues (modulo D).
+//
+// OJO: `cant_rechazada` NO entra al inventario ni se registra como
+// merma. Producto que llega inservible nunca fue de Fresh Orden --
+// es incidencia reclamable al proveedor. Mezclarlo con merma
+// contamina el indicador de bodega con un problema de compras.
+//
+// Las entradas al kardex NO se insertan desde aqui: las dispara el
+// trigger trg_mov_entrada_recepcion sobre recepcion_detalle. Si se
+// insertaran tambien desde el navegador, cada recepcion quedaria
+// duplicada en movimientos_inventario.
+
+let PROVEEDORES = [];
+let EQUIV = [];            // proveedor_producto: equivalencias y unidades
+let recRenglones = [];     // renglones en captura
+let recSeq = 0;            // id estable por renglon (no se reusa al borrar)
+let RECLAMOS_ABIERTOS = []; // reclamos del proveedor elegido, para ligar reposiciones
+
+async function cargarProveedores() {
+  const { data: provs, error: e1 } = await sb
+    .from('proveedores')
+    .select('id, nombre, rfc, emite_cfdi')
+    .eq('activo', true)
+    .order('nombre');
+  if (e1) { showToast('⚠️ Error cargando proveedores: ' + e1.message); return false; }
+  PROVEEDORES = provs || [];
+
+  const { data: eq, error: e2 } = await sb
+    .from('proveedor_producto')
+    .select('proveedor_id, producto_id, descripcion_proveedor, unidad_proveedor, factor_conversion')
+    .eq('activo', true);
+  if (e2) { showToast('⚠️ Error cargando equivalencias: ' + e2.message); return false; }
+  EQUIV = eq || [];
+  return true;
 }
 
-function renderRecepciones() {
-  const el = document.getElementById('recepciones-list');
-  if (!recepciones.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-msg">Sin recepciones registradas</div></div>';
+function initRecepcion() {
+  const sel = document.getElementById('rec-proveedor');
+  if (sel && sel.options.length <= 1) {
+    sel.innerHTML = '<option value="">Selecciona...</option>' +
+      PROVEEDORES.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+  }
+  const f = document.getElementById('rec-fecha');
+  if (f && !f.value) f.value = fechaNegocioHoy();
+}
+
+function recToggleSinNota() {
+  const sin = document.getElementById('rec-sin-nota').checked;
+  document.getElementById('rec-folio-wrap').style.display = sin ? 'none' : '';
+  if (sin) document.getElementById('rec-folio').value = '';
+}
+
+function recCambioProveedor() {
+  // Cambiar de proveedor invalida los renglones: el catalogo de
+  // equivalencias es distinto y un producto_id podria no existir
+  // para el nuevo proveedor.
+  if (recRenglones.length && !confirm('Cambiar de proveedor borra los productos capturados. Continuar?')) {
     return;
   }
-  el.innerHTML = recepciones.slice(0,5).map(r => `
-    <div style="padding:10px 20px;border-bottom:0.5px solid var(--gray-100);font-size:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span class="bold" style="font-size:13px">${r.producto}</span>
-        <span class="badge ${r.malos||r.faltantes ? 'badge-amber':'badge-green'}">${r.malos||r.faltantes ? '⚠️ Con diferencias':'✓ OK'}</span>
-      </div>
-      <div style="color:var(--gray-500);margin-top:3px">${r.cajas} cajas · ${r.kgNeto} kg neto · ${r.fecha}</div>
-      ${r.malos ? `<div style="color:var(--amber);margin-top:2px">⚠️ ${r.malos} cajas mal estado ${r.repos==='si'?'— Reposición solicitada':''}</div>` : ''}
-    </div>`).join('');
+  recRenglones = [];
+  recRenderRenglones();
+  cargarReclamosAbiertos();
 }
 
-function quickRecepcion() {
-  alert('✅ Recepción rápida registrada. Ve a la sección Recepción Bodega para el detalle completo.');
-  closeModal('modal-proveedor');
+async function cargarReclamosAbiertos() {
+  const pid = document.getElementById('rec-proveedor').value;
+  RECLAMOS_ABIERTOS = [];
+  if (!pid) return;
+  const { data, error } = await sb
+    .from('mermas')
+    .select('id, fecha, producto_id, cantidad, motivo')
+    .eq('clasificacion', 'reclamo_proveedor')
+    .eq('proveedor_id', pid)
+    .neq('estatus', 'condonado')
+    .order('fecha', { ascending: false });
+  if (!error) RECLAMOS_ABIERTOS = data || [];
+  recRenderRenglones();
+}
+
+// Sin esta liga el saldo de v_reclamos nunca baja: la reposicion
+// entraria al inventario pero el reclamo seguiria pendiente.
+function recSelectorReclamo(r) {
+  const opciones = RECLAMOS_ABIERTOS.filter(m => m.producto_id === r.producto_id);
+  if (!opciones.length) {
+    return `<div style="font-size:11px;color:var(--amber);margin-bottom:8px">
+              No hay reclamos registrados de este producto. Registralo primero en Mermas y reclamos.
+            </div>`;
+  }
+  return `<div style="margin-bottom:8px">
+    <label class="form-label">Aplica al reclamo</label>
+    <select class="form-select" style="width:100%" onchange="recSet(${r.key},'merma_id',this.value)">
+      <option value="">Sin ligar</option>
+      ${opciones.map(m => `<option value="${m.id}"${m.id===r.merma_id?' selected':''}>${m.fecha} · ${m.cantidad} · ${(m.motivo||'').slice(0,28)}</option>`).join('')}
+    </select>
+  </div>`;
+}
+
+function recEquivDeProveedor() {
+  const pid = document.getElementById('rec-proveedor').value;
+  return EQUIV.filter(e => e.proveedor_id === pid);
+}
+
+function recAddRenglon() {
+  const pid = document.getElementById('rec-proveedor').value;
+  if (!pid) { showToast('⚠️ Selecciona primero el proveedor'); return; }
+  const eqs = recEquivDeProveedor();
+  if (!eqs.length) { showToast('⚠️ Este proveedor no tiene productos catalogados'); return; }
+  recRenglones.push({
+    key: ++recSeq,
+    producto_id: eqs[0].producto_id,
+    descripcion_nota: '',
+    cant_documento: 0,
+    cant_recibida: 0,
+    cant_rechazada: 0,
+    costo_unitario: 0,
+    clasificacion: 'compra',
+    merma_id: null,
+  });
+  recRenderRenglones();
+}
+
+function recDelRenglon(key) {
+  recRenglones = recRenglones.filter(r => r.key !== key);
+  recRenderRenglones();
+}
+
+// La cantidad recibida se autocompleta con la del documento.
+// El caso normal es que coincidan; bodega solo toca el campo
+// cuando hay diferencia, que es justo lo que queremos registrar.
+function recSet(key, campo, valor) {
+  const r = recRenglones.find(x => x.key === key);
+  if (!r) return;
+  if (campo === 'producto_id' || campo === 'descripcion_nota') {
+    r[campo] = valor;
+    if (campo === 'producto_id') { r.merma_id = null; recRenderRenglones(); return; }
+  } else if (campo === 'clasificacion') {
+    r.clasificacion = valor;
+    // Reposicion y bonificacion llegan sin precio en la nota: no hay
+    // nada que pagar. El costo de inventario lo resuelve el trigger.
+    if (valor !== 'compra') r.costo_unitario = 0;
+    r.merma_id = null;
+    recRenderRenglones();
+    return;
+  } else if (campo === 'merma_id') {
+    r.merma_id = valor || null;
+    return;
+  } else {
+    const eq = recEquivDeProveedor().find(e => e.producto_id === r.producto_id);
+    const unidad = eq ? eq.unidad_proveedor : 'caja';
+    r[campo] = (campo === 'costo_unitario')
+      ? Math.max(0, +valor || 0)
+      : normalizaCantidad(valor, unidad);
+    if (campo === 'cant_documento') {
+      r.cant_recibida = r.cant_documento;
+      const inp = document.getElementById(`rec-r${key}-recibida`);
+      if (inp) inp.value = r.cant_recibida;
+    }
+  }
+  recPintaRenglon(key);
+  recRecalcTotal();
+}
+
+function recPintaRenglon(key) {
+  const r = recRenglones.find(x => x.key === key);
+  if (!r) return;
+  const el = document.getElementById(`rec-r${key}-info`);
+  if (!el) return;
+  const importe = r.cant_documento * r.costo_unitario;
+  const dif = r.cant_recibida !== r.cant_documento;
+  el.innerHTML =
+    `<span class="mono">Importe $${importe.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` +
+    (dif ? ` <span style="color:var(--amber);font-weight:600">· Diferencia contra nota</span>` : '') +
+    (r.cant_rechazada > 0 ? ` <span style="color:var(--red);font-weight:600">· ${r.cant_rechazada} rechazado</span>` : '');
+}
+
+function recRenderRenglones() {
+  const cont = document.getElementById('rec-renglones');
+  if (!cont) return;
+  if (!recRenglones.length) {
+    cont.innerHTML = '<div style="font-size:12px;color:var(--gray-500);padding:8px 0 16px">Sin productos capturados</div>';
+    recRecalcTotal();
+    return;
+  }
+  const eqs = recEquivDeProveedor();
+  cont.innerHTML = recRenglones.map(r => {
+    const eq = eqs.find(e => e.producto_id === r.producto_id);
+    const unidad = eq ? eq.unidad_proveedor : '';
+    const paso = esUnidadDecimal(unidad) ? '0.01' : '1';
+    return `
+    <div style="border:0.5px solid var(--gray-200);border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <select class="form-select" style="flex:1;margin-right:8px" onchange="recSet(${r.key},'producto_id',this.value)">
+          ${eqs.map(e => `<option value="${e.producto_id}"${e.producto_id===r.producto_id?' selected':''}>${e.descripcion_proveedor}</option>`).join('')}
+        </select>
+        <button class="topbar-btn" style="padding:6px 10px" onclick="recDelRenglon(${r.key})" aria-label="Quitar">✕</button>
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="form-label">Concepto</label>
+        <select class="form-select" style="width:100%" onchange="recSet(${r.key},'clasificacion',this.value)">
+          <option value="compra"${r.clasificacion==='compra'?' selected':''}>Compra normal</option>
+          <option value="reposicion"${r.clasificacion==='reposicion'?' selected':''}>Reposicion de reclamo</option>
+          <option value="bonificacion"${r.clasificacion==='bonificacion'?' selected':''}>Bonificacion (extra sin costo)</option>
+        </select>
+      </div>
+      ${r.clasificacion === 'reposicion' ? recSelectorReclamo(r) : ''}
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div style="flex:1">
+          <label class="form-label">Cantidad en nota (${unidad})</label>
+          <input type="number" class="form-input" style="width:100%" inputmode="decimal" min="0" step="${paso}"
+                 value="${r.cant_documento || ''}" oninput="recSet(${r.key},'cant_documento',this.value)">
+        </div>
+        <div style="flex:1">
+          <label class="form-label">Precio unitario</label>
+          <input type="number" class="form-input" style="width:100%" inputmode="decimal" min="0" step="0.01"
+                 ${r.clasificacion !== 'compra' ? 'disabled' : ''}
+                 value="${r.costo_unitario || ''}" oninput="recSet(${r.key},'costo_unitario',this.value)">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div style="flex:1">
+          <label class="form-label">Recibido real</label>
+          <input type="number" class="form-input" style="width:100%" inputmode="decimal" min="0" step="${paso}"
+                 id="rec-r${r.key}-recibida" value="${r.cant_recibida || ''}" oninput="recSet(${r.key},'cant_recibida',this.value)">
+        </div>
+        <div style="flex:1">
+          <label class="form-label">Rechazado</label>
+          <input type="number" class="form-input" style="width:100%" inputmode="decimal" min="0" step="${paso}"
+                 value="${r.cant_rechazada || ''}" oninput="recSet(${r.key},'cant_rechazada',this.value)">
+        </div>
+      </div>
+      <input type="text" class="form-input" style="width:100%;margin-bottom:8px" placeholder="Como viene escrito en la nota (opcional)"
+             value="${r.descripcion_nota || ''}" oninput="recSet(${r.key},'descripcion_nota',this.value)">
+      <div id="rec-r${r.key}-info" style="font-size:12px;color:var(--gray-500)"></div>
+    </div>`;
+  }).join('');
+  recRenglones.forEach(r => recPintaRenglon(r.key));
+  recRecalcTotal();
+}
+
+// El total manuscrito de la nota es la validacion de captura.
+// Los errores de suma a mano son comunes y hoy nadie los detecta.
+function recRecalcTotal() {
+  const suma = recRenglones.reduce((a, r) => a + r.cant_documento * r.costo_unitario, 0);
+  const declarado = +document.getElementById('rec-importe-nota').value || 0;
+  const el = document.getElementById('rec-cuadre');
+  const fmt = n => '$' + n.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+  if (!declarado) {
+    el.style.color = 'var(--gray-500)';
+    el.textContent = 'Suma capturada: ' + fmt(suma);
+    return;
+  }
+  const dif = Math.round((suma - declarado) * 100) / 100;
+  if (Math.abs(dif) < 0.01) {
+    el.style.color = 'var(--green)';
+    el.textContent = '✓ Cuadra con la nota: ' + fmt(suma);
+  } else {
+    el.style.color = 'var(--amber)';
+    el.textContent = `⚠️ Suma capturada ${fmt(suma)} — difiere ${fmt(Math.abs(dif))} del total de la nota`;
+  }
+}
+
+async function guardarRecepcion() {
+  const btn = document.getElementById('btn-guardar-recepcion');
+  const proveedor_id = document.getElementById('rec-proveedor').value;
+  const fecha = document.getElementById('rec-fecha').value;
+  const sinNota = document.getElementById('rec-sin-nota').checked;
+  const folio = document.getElementById('rec-folio').value.trim();
+
+  if (!proveedor_id) { showToast('⚠️ Selecciona el proveedor'); return; }
+  if (!fecha) { showToast('⚠️ Captura la fecha de la nota'); return; }
+  if (!sinNota && !folio) { showToast('⚠️ Captura el folio, o marca "compra sin nota"'); return; }
+  const validos = recRenglones.filter(r => r.cant_documento > 0 || r.cant_recibida > 0);
+  if (!validos.length) { showToast('⚠️ Captura al menos un producto con cantidad'); return; }
+  for (const r of validos) {
+    if (r.clasificacion === 'compra' && r.costo_unitario <= 0) {
+      showToast('⚠️ Los renglones de compra necesitan precio unitario'); return;
+    }
+    if (r.clasificacion === 'reposicion' && !r.merma_id) {
+      showToast('⚠️ Liga la reposicion a su reclamo, o el saldo nunca se cierra'); return;
+    }
+    if (r.cant_recibida + r.cant_rechazada > r.cant_documento && r.cant_documento > 0) {
+      if (!confirm('Recibido mas rechazado excede lo que dice la nota. Guardar de todos modos?')) return;
+      break;
+    }
+  }
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  const { data: cab, error: eCab } = await sb
+    .from('recepciones')
+    .insert({
+      proveedor_id,
+      folio_nota: sinNota ? null : folio,
+      fecha,
+      con_documento: !sinNota,
+      importe_nota: +document.getElementById('rec-importe-nota').value || null,
+      notas: document.getElementById('rec-notas').value.trim() || null,
+    })
+    .select('id')
+    .single();
+
+  if (eCab) {
+    btn.disabled = false; btn.textContent = 'Guardar recepcion';
+    showToast(eCab.code === '23505'
+      ? '⚠️ Ese folio ya fue capturado para este proveedor'
+      : '⚠️ Error al guardar: ' + eCab.message);
+    return;
+  }
+
+  const { error: eDet } = await sb.from('recepcion_detalle').insert(
+    validos.map(r => ({
+      recepcion_id: cab.id,
+      producto_id: r.producto_id,
+      descripcion_nota: r.descripcion_nota || null,
+      cant_documento: r.cant_documento,
+      cant_recibida: r.cant_recibida,
+      cant_rechazada: r.cant_rechazada,
+      costo_unitario: r.costo_unitario,
+      clasificacion: r.clasificacion || 'compra',
+      merma_id: r.merma_id || null,
+    }))
+  );
+
+  if (eDet) {
+    // Sin detalle la cabecera no sirve y ademas bloquea el folio.
+    await sb.from('recepciones').delete().eq('id', cab.id);
+    btn.disabled = false; btn.textContent = 'Guardar recepcion';
+    showToast('⚠️ Error al guardar el detalle: ' + eDet.message);
+    return;
+  }
+
+  // La foto es respaldo, no requisito: si falla la subida la
+  // recepcion ya quedo registrada y se avisa sin perder la captura.
+  let avisoFoto = '';
+  const file = document.getElementById('rec-foto').files[0];
+  if (file) {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${proveedor_id}/${cab.id}.${ext}`;
+    const { error: eUp } = await sb.storage.from('recepciones').upload(path, file, { upsert: true });
+    if (eUp) {
+      avisoFoto = ' — la foto NO subio: ' + (eUp.message || 'error desconocido');
+      console.error('[recepcion] fallo la subida de la foto', eUp);
+    } else {
+      const { data: upd, error: eFoto } = await sb
+        .from('recepciones').update({ foto_path: path })
+        .eq('id', cab.id).select('id');
+      if (eFoto) {
+        avisoFoto = ' — la foto subio pero no quedo ligada: ' + eFoto.message;
+        console.error('[recepcion] fallo el update de foto_path', eFoto);
+      } else if (!upd || !upd.length) {
+        avisoFoto = ' — la foto subio pero no quedo ligada (permisos)';
+        console.error('[recepcion] el update de foto_path no afecto ningun renglon');
+      }
+    }
+  }
+
+  showToast(avisoFoto
+    ? '⚠️ Recepcion registrada' + avisoFoto
+    : '✅ Recepcion registrada — el inventario ya se movio');
+  recRenglones = [];
+  document.getElementById('rec-folio').value = '';
+  document.getElementById('rec-importe-nota').value = '';
+  document.getElementById('rec-notas').value = '';
+  document.getElementById('rec-foto').value = '';
+  recRenderRenglones();
+  btn.disabled = false; btn.textContent = 'Guardar recepcion';
+  cargarRecepciones();
+}
+
+async function cargarRecepciones() {
+  const el = document.getElementById('recepciones-list');
+  if (!el) return;
+  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
+
+  const { data, error } = await sb
+    .from('recepciones')
+    .select('id, fecha, folio_nota, con_documento, importe_nota, foto_path, proveedores(nombre), recepcion_detalle(producto_id, cant_documento, cant_recibida, cant_rechazada, costo_unitario)')
+    .order('fecha', { ascending: false })
+    .limit(50);
+
+  if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando recepciones</div></div>'; return; }
+  if (!data || !data.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📥</div><div class="empty-msg">Sin recepciones registradas</div></div>';
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fecha</th><th>Proveedor</th><th>Nota</th><th>Productos</th><th style="text-align:right">Importe</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${data.map(r => {
+          const det = r.recepcion_detalle || [];
+          const suma = det.reduce((a,d) => a + (+d.cant_documento || 0) * (+d.costo_unitario || 0), 0);
+          const hayDif = det.some(d => +d.cant_recibida !== +d.cant_documento || +d.cant_rechazada > 0);
+          const nombres = det.map(d => (PRODUCTS_ALL.find(p => p.id === d.producto_id)?.name) || '—').join(', ');
+          return `<tr>
+            <td class="mono">${r.fecha}</td>
+            <td>${r.proveedores?.nombre || '—'}</td>
+            <td class="mono">${r.con_documento ? (r.folio_nota || '—') : '<span class="badge badge-amber">Sin nota</span>'}</td>
+            <td>${nombres}</td>
+            <td class="mono" style="text-align:right">$${suma.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            <td>${hayDif ? '<span class="badge badge-amber">⚠ Con diferencias</span>' : '<span class="badge badge-green">✓ Completa</span>'}</td>
+            <td>${r.foto_path
+                    ? `<button class="topbar-btn" onclick="verFotoNota('${r.foto_path}')">Ver nota</button>`
+                    : '<span style="font-size:11px;color:var(--gray-500)">Sin foto</span>'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+async function verFotoNota(path) {
+  // URL firmada, igual que las facturas: el bucket es privado y el
+  // navegador nunca ve una ruta publica.
+  const { data, error } = await sb.storage.from('recepciones').createSignedUrl(path, 120);
+  if (error || !data?.signedUrl) { showToast('⚠️ No se pudo abrir la foto'); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+// ------------------------------------------------------------
+// MERMAS Y RECLAMOS
+// ------------------------------------------------------------
+// Merma y reclamo son el mismo hecho visto desde dos angulos, por eso
+// comparten registro: separarlos obligaria a mantener dos tablas
+// sincronizadas a mano. La clasificacion decide el tratamiento --
+// el reclamo sale a costo cero porque el costo viaja con la
+// reposicion que va a llegar; el deterioro sale al costo promedio
+// porque ahi si hubo perdida real.
+
+function initMermas() {
+  const selProd = document.getElementById('mer-producto');
+  if (selProd && !selProd.options.length) {
+    selProd.innerHTML = PRODUCTS_ALL.filter(p => p.activo)
+      .map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  }
+  const selProv = document.getElementById('mer-proveedor');
+  if (selProv && selProv.options.length <= 1) {
+    selProv.innerHTML = '<option value="">Selecciona...</option>' +
+      PROVEEDORES.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+  }
+  merToggleReclamo();
+  cargarReclamos();
+  cargarMermas();
+}
+
+function merToggleReclamo() {
+  const cl = document.getElementById('mer-clasificacion').value;
+  const esReclamo = cl === 'reclamo_proveedor';
+  document.getElementById('mer-reclamo-wrap').style.display = esReclamo ? '' : 'none';
+  const aviso = document.getElementById('mer-aviso');
+  aviso.textContent = esReclamo
+    ? 'Sale del inventario a costo cero: el costo ya se pago y regresa con la reposicion.'
+    : 'Sale del inventario al costo promedio. Es perdida que absorbe Fresh Orden.';
+}
+
+async function merCargarNotas() {
+  const sel = document.getElementById('mer-recepcion');
+  const pid = document.getElementById('mer-proveedor').value;
+  sel.innerHTML = '<option value="">Sin especificar</option>';
+  if (!pid) return;
+  const { data } = await sb
+    .from('recepciones')
+    .select('id, folio_nota, fecha')
+    .eq('proveedor_id', pid)
+    .order('fecha', { ascending: false })
+    .limit(30);
+  (data || []).forEach(r => {
+    sel.innerHTML += `<option value="${r.id}">${r.fecha} · Nota ${r.folio_nota || 'sin folio'}</option>`;
+  });
+}
+
+async function guardarMerma() {
+  const btn = document.getElementById('btn-guardar-merma');
+  const producto_id   = document.getElementById('mer-producto').value;
+  const cantidad      = +document.getElementById('mer-cantidad').value || 0;
+  const clasificacion = document.getElementById('mer-clasificacion').value;
+  const proveedor_id  = document.getElementById('mer-proveedor').value || null;
+  const recepcion_id  = document.getElementById('mer-recepcion').value || null;
+  const motivo        = document.getElementById('mer-motivo').value.trim() || null;
+
+  if (!producto_id) { showToast('⚠️ Selecciona el producto'); return; }
+  if (cantidad <= 0) { showToast('⚠️ Captura la cantidad perdida'); return; }
+  if (clasificacion === 'reclamo_proveedor' && !proveedor_id) {
+    showToast('⚠️ Un reclamo necesita proveedor: sin el no hay a quien cobrarle'); return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  const { error } = await sb.from('mermas').insert({
+    producto_id, cantidad, clasificacion, proveedor_id, recepcion_id, motivo,
+  });
+  btn.disabled = false; btn.textContent = 'Registrar merma';
+
+  if (error) { showToast('⚠️ Error al registrar: ' + error.message); return; }
+
+  showToast(clasificacion === 'reclamo_proveedor'
+    ? '✅ Reclamo registrado — queda abierto hasta que llegue la reposicion'
+    : '✅ Merma registrada');
+  document.getElementById('mer-cantidad').value = '';
+  document.getElementById('mer-motivo').value = '';
+  cargarReclamos();
+  cargarMermas();
+  cargarReclamosAbiertos();
+}
+
+async function cargarReclamos() {
+  const el = document.getElementById('reclamos-wrap');
+  if (!el) return;
+  const { data, error } = await sb
+    .from('v_reclamos')
+    .select('proveedor, producto, fecha, estatus, reclamado, repuesto, bonificado, pendiente, motivo')
+    .order('fecha', { ascending: false });
+
+  if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando reclamos</div></div>'; return; }
+  if (!data || !data.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">Sin reclamos registrados</div></div>';
+    return;
+  }
+  const n = v => (+v || 0).toLocaleString('es-MX',{maximumFractionDigits:2});
+  el.innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Proveedor</th><th>Producto</th>
+        <th style="text-align:right">Reclamado</th><th style="text-align:right">Repuesto</th>
+        <th style="text-align:right">Bonificado</th><th style="text-align:right">Pendiente</th></tr></thead>
+      <tbody>${data.map(r => {
+        const pend = +r.pendiente || 0;
+        return `<tr>
+          <td class="mono">${r.fecha}</td>
+          <td>${r.proveedor}</td>
+          <td>${r.producto}</td>
+          <td class="mono" style="text-align:right">${n(r.reclamado)}</td>
+          <td class="mono" style="text-align:right">${n(r.repuesto)}</td>
+          <td class="mono" style="text-align:right">${n(r.bonificado)}</td>
+          <td class="mono" style="text-align:right">${pend > 0
+              ? `<span class="badge badge-amber">${n(pend)} por reponer</span>`
+              : '<span class="badge badge-green">✓ Saldado</span>'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+}
+
+async function cargarMermas() {
+  const el = document.getElementById('mermas-wrap');
+  if (!el) return;
+  const { data, error } = await sb
+    .from('mermas')
+    .select('fecha, producto_id, cantidad, clasificacion, motivo, proveedores(nombre)')
+    .order('fecha', { ascending: false })
+    .limit(50);
+
+  if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando mermas</div></div>'; return; }
+  if (!data || !data.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🗑️</div><div class="empty-msg">Sin mermas registradas</div></div>';
+    return;
+  }
+  const etiqueta = {
+    deterioro: 'Deterioro en bodega',
+    reclamo_proveedor: 'Reclamo a proveedor',
+    robo_extravio: 'Robo o extravio',
+    otro: 'Otro',
+  };
+  el.innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Producto</th><th style="text-align:right">Cantidad</th><th>Motivo</th><th>Proveedor</th><th>Detalle</th></tr></thead>
+      <tbody>${data.map(m => {
+        const prod = PRODUCTS_ALL.find(p => p.id === m.producto_id);
+        const esReclamo = m.clasificacion === 'reclamo_proveedor';
+        return `<tr>
+          <td class="mono">${m.fecha}</td>
+          <td class="bold">${prod ? prod.name : '—'}</td>
+          <td class="mono" style="text-align:right">${(+m.cantidad).toLocaleString('es-MX',{maximumFractionDigits:2})}</td>
+          <td>${esReclamo
+                ? `<span class="badge badge-amber">${etiqueta[m.clasificacion]}</span>`
+                : etiqueta[m.clasificacion] || m.clasificacion}</td>
+          <td>${m.proveedores?.nombre || '—'}</td>
+          <td style="font-size:12px;color:var(--gray-500)">${m.motivo || ''}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+}
+
+async function cargarExistencias() {
+  const el = document.getElementById('existencias-wrap');
+  if (!el) return;
+  el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
+
+  // v1.15.0 — total_ajustes.
+  // Sin esta columna el renglon no cuadraba a la vista: la resta
+  // entradas - salidas - mermas ignoraba los ajustes, que si entran
+  // a `existencia`. Tras el conteo fisico del 20-ago-2026 la
+  // diferencia era de cientos de unidades y se leia como error de
+  // calculo de la pantalla.
+  const { data, error } = await sb
+    .from('v_existencias')
+    .select('producto_id, nombre, unidad_venta, existencia, total_entradas, total_salidas, total_mermas, total_ajustes, costo_promedio')
+    .order('nombre');
+
+  if (error) { el.innerHTML = '<div class="empty-state"><div class="empty-msg">Error cargando existencias</div></div>'; return; }
+  if (!data || !data.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-msg">Sin movimientos registrados</div></div>';
+    return;
+  }
+
+  const num = n => (+n || 0).toLocaleString('es-MX',{maximumFractionDigits:2});
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Producto</th><th style="text-align:right">Entradas</th><th style="text-align:right">Salidas</th><th style="text-align:right">Mermas</th><th style="text-align:right">Ajustes</th><th style="text-align:right">Existencia</th><th style="text-align:right">Costo prom.</th></tr></thead>
+        <tbody>${data.map(e => {
+          const neg = +e.existencia < 0;
+          // El ajuste conserva su signo: un -291 debe leerse negativo.
+          // Salidas y mermas se invierten en la vista porque siempre
+          // restan; un ajuste puede sumar o restar, y el signo es el dato.
+          const aj = +e.total_ajustes || 0;
+          return `<tr>
+            <td class="bold">${e.nombre}</td>
+            <td class="mono" style="text-align:right">${num(e.total_entradas)}</td>
+            <td class="mono" style="text-align:right">${num(e.total_salidas)}</td>
+            <td class="mono" style="text-align:right">${num(e.total_mermas)}</td>
+            <td class="mono" style="text-align:right;${aj !== 0 ? 'color:var(--amber);font-weight:600' : 'color:var(--gray-200)'}">${aj !== 0 ? num(aj) : '—'}</td>
+            <td class="mono" style="text-align:right;${neg?'color:var(--red);font-weight:600':''}">${num(e.existencia)} ${e.unidad_venta}${neg?' ⚠':''}</td>
+            <td class="mono" style="text-align:right">${e.costo_promedio ? '$'+(+e.costo_promedio).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+    <div style="padding:12px 20px;font-size:11px;color:var(--gray-500);border-top:0.5px solid var(--gray-100)">
+      Existencia = Entradas &minus; Salidas &minus; Mermas + Ajustes. El conteo fisico de arranque se registro el 20-ago-2026; a partir de esa fecha una existencia negativa es una anomalia que debe investigarse.
+    </div>`;
 }
 
 // ============================================================
@@ -3093,6 +3703,12 @@ async function loadCatalogos() {
   }));
   PRODUCTS = PRODUCTS_ALL.filter(p => p.activo);
 
+  // Proveedores y equivalencias solo los necesitan los perfiles que
+  // capturan recepcion; para sucursal seria una consulta negada por RLS.
+  if (['bodega','admin','gerencia'].includes(currentUser?.rol)) {
+    await cargarProveedores();
+  }
+
   return true;
 }
 
@@ -3762,13 +4378,22 @@ function showToast(msg) {
       box-shadow:0 4px 20px rgba(0,0,0,0.3);
       transition:opacity 0.3s;
       max-width:320px;
+      pointer-events:none;
     `;
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
   toast.style.opacity = '1';
   clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+  toast.style.visibility = 'visible';
+  clearTimeout(toast._hide);
+  // Con opacity 0 el div seguia en su lugar interceptando toques. En
+  // celular mide casi todo el ancho de la pantalla y quedaba encima
+  // del boton de guardar: el boton se veia activo y no respondia.
+  toast._timer = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast._hide = setTimeout(() => { toast.style.visibility = 'hidden'; }, 350);
+  }, 3500);
 }
 
 // ============================================================
