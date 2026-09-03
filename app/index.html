@@ -496,7 +496,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace;pointer-events:none">v1.15.0</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace;pointer-events:none">v1.15.3</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -3562,6 +3562,9 @@ async function renderHistorial() {
   // El total acumulado respeta el filtro de productos: al aislar los
   // productos de un proveedor, la suma es la de ese proveedor.
   let granTotal = 0;
+  // v1.15.3 — Acumulado por producto para el pie. Clave producto|unidad:
+  // un mismo producto puede haberse pedido en caja y en kg en el rango.
+  const totProd = {};
 
   const cuerpo = rows.map(r => {
     const est = ESTADOS_PEDIDO[r.estatus] || ESTADOS_PEDIDO.capturado;
@@ -3579,6 +3582,13 @@ async function renderHistorial() {
       const p = PRODUCTS_ALL.find(x => x.id === d.producto_id);
       if (!p) return '';
       const unidad = d.unidad_aplicada || p.unit;
+      // v1.15.3 — Misma regla que el renglón: manda la cantidad vigente
+      // según el estatus, y los cancelados no suman (igual que granTotal).
+      if (r.estatus !== 'cancelado') {
+        const k = `${d.producto_id}|${unidad}`;
+        if (!totProd[k]) totProd[k] = { icon: p.icon, name: p.name, unidad, cant: 0, orden: PRODUCTS_ALL.indexOf(p) };
+        totProd[k].cant += cantidadVigente(r.estatus, d.cant_solicitada, d.cant_surtida);
+      }
       return `${p.icon} ${celdaCantidad(r.estatus, d.cant_solicitada, d.cant_surtida, unidad)}`;
     }).filter(Boolean).join(', ');
     return `<tr>
@@ -3595,6 +3605,17 @@ async function renderHistorial() {
     ? ` · ${canceladas} cancelado${canceladas>1?'s':''} no suma${canceladas>1?'n':''}`
     : '';
 
+  // v1.15.3 — Resumen por producto para el pie: kg con hasta 2 decimales,
+  // cajas enteras (misma regla que normalizaCantidad).
+  const resumenProd = Object.values(totProd)
+    .sort((a,b) => a.orden - b.orden)
+    .map(t => {
+      const cant = esUnidadDecimal(t.unidad)
+        ? (Math.round(t.cant * 100) / 100).toLocaleString('es-MX', { maximumFractionDigits: 2 })
+        : Math.round(t.cant).toLocaleString('es-MX');
+      return `<span style="white-space:nowrap" title="${t.name}">${t.icon} <b>${cant}</b> ${t.unidad}</span>`;
+    }).join(', ');
+
   el.innerHTML = `
     <div class="table-wrap">
       <table>
@@ -3602,9 +3623,10 @@ async function renderHistorial() {
         <tbody>${cuerpo}</tbody>
         <tfoot>
           <tr style="border-top:2px solid var(--gray-200);background:var(--gray-50)">
-            <td colspan="4" class="bold" style="text-align:right;padding-right:14px">
+            <td colspan="3" class="bold" style="text-align:right;padding-right:14px">
               ${rows.length} pedido${rows.length>1?'s':''}${nota} &nbsp;·&nbsp; Total acumulado
             </td>
+            <td class="bold" style="font-size:12px;color:var(--gray-700)">${resumenProd || '—'}</td>
             <td class="mono bold" style="color:var(--green);font-size:14px">
               $${granTotal.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}
             </td>
