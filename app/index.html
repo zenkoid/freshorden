@@ -496,7 +496,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
 <body>
 
 <!-- VERSIÓN DE LA APP — visible siempre, se sube solo cuando hay cambios reales al archivo -->
-<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace;pointer-events:none">v1.15.3</div>
+<div id="app-version-badge" style="position:fixed;bottom:6px;right:8px;font-size:10px;color:#aaa;background:rgba(255,255,255,0.85);padding:2px 6px;border-radius:4px;z-index:999;font-family:monospace;pointer-events:none">v1.15.4</div>
 
 
 <!-- LOGIN OVERLAY -->
@@ -807,9 +807,16 @@ hr.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0
               </div>
               <div class="form-group" id="hist-tienda-group">
                 <label class="form-label">Tienda</label>
-                <select class="form-select" id="hist-tienda" onchange="renderHistorial()">
-                  <option value="">Todas</option>
-                </select>
+                <details class="ms" id="hist-tienda-ms">
+                  <summary class="ms-sum" id="hist-tienda-sum">Todas</summary>
+                  <div class="ms-panel">
+                    <div class="ms-acciones">
+                      <button type="button" class="ms-link" onclick="histTiendaTodas(true)">Todas</button>
+                      <button type="button" class="ms-link" onclick="histTiendaTodas(false)">Ninguna</button>
+                    </div>
+                    <div id="hist-tienda-panel"></div>
+                  </div>
+                </details>
               </div>
               <div class="form-group">
                 <label class="form-label">Productos</label>
@@ -1729,7 +1736,7 @@ function init() {
     : 'Todas / N-A';
 
   // Populate tienda selects (pantallas de admin/gerencia que sí requieren elegir tienda)
-  const tiendaSelects = document.querySelectorAll('#pf-tienda, #hist-tienda, #exc-sucursal');
+  const tiendaSelects = document.querySelectorAll('#pf-tienda, #exc-sucursal');
   tiendaSelects.forEach(sel => {
     TIENDAS.forEach(t => {
       const o = document.createElement('option');
@@ -1737,6 +1744,19 @@ function init() {
       sel.appendChild(o);
     });
   });
+
+  // v1.15.4 — Filtro de tiendas del Historial: casillas, igual que
+  // productos. Orden alfabético para ubicar rápido entre ~20 sucursales.
+  const histTiendaPanel = document.getElementById('hist-tienda-panel');
+  if (histTiendaPanel) {
+    histTiendaPanel.innerHTML = [...TIENDAS]
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+      .map(t => `
+      <label class="ms-opt">
+        <input type="checkbox" value="${t.id}" onchange="histTiendaCambio()">
+        <span>${t.name}</span>
+      </label>`).join('');
+  }
 
   // Filtro de productos del Historial: casillas, no lista desplegable.
   // Permite aislar los productos de un mismo proveedor y leer el
@@ -3500,6 +3520,43 @@ function histProdTodos(marcar) {
   histProdCambio();
 }
 
+// ── Selector múltiple de tiendas (v1.15.4) ──────────────────
+// Misma regla que productos: ninguna marcada equivale a "todas".
+function histTiendaSeleccionadas() {
+  const panel = document.getElementById('hist-tienda-panel');
+  if (!panel) return [];
+  return [...panel.querySelectorAll('input:checked')].map(i => i.value);
+}
+
+function histTiendaCambio() {
+  const sel = histTiendaSeleccionadas();
+  const sum = document.getElementById('hist-tienda-sum');
+  if (sum) {
+    if (!sel.length) sum.textContent = 'Todas';
+    else if (sel.length === 1) {
+      const t = TIENDAS.find(x => String(x.id) === sel[0]);
+      sum.textContent = t ? t.name : '1 tienda';
+    } else sum.textContent = `${sel.length} tiendas`;
+  }
+  renderHistorial();
+}
+
+function histTiendaTodas(marcar) {
+  const panel = document.getElementById('hist-tienda-panel');
+  if (!panel) return;
+  panel.querySelectorAll('input').forEach(i => { i.checked = marcar; });
+  histTiendaCambio();
+}
+
+// v1.15.4 — Con dos selectores en la misma fila: abrir uno cierra el
+// otro, y un clic fuera de cualquiera los cierra (antes solo cerraba
+// con un segundo clic sobre el propio selector).
+document.addEventListener('click', ev => {
+  document.querySelectorAll('details.ms[open]').forEach(d => {
+    if (!d.contains(ev.target)) d.removeAttribute('open');
+  });
+});
+
 // ============================================================
 // HISTORIAL
 // ============================================================
@@ -3509,8 +3566,7 @@ async function renderHistorial() {
   const prodSel = histProdSeleccionados();
   const estatusFilterEl = document.getElementById('hist-estatus');
   const estatusFilter = estatusFilterEl ? estatusFilterEl.value : '';
-  const tiendaFilterEl = document.getElementById('hist-tienda');
-  const tiendaFilter = tiendaFilterEl ? tiendaFilterEl.value : '';
+  const tiendaSel = histTiendaSeleccionadas();
   el.innerHTML = '<div class="empty-state"><div class="empty-msg">Cargando...</div></div>';
 
   let query = sb
@@ -3534,7 +3590,9 @@ async function renderHistorial() {
     const fmt = d => fmtFechaLocal(d);
     query = query.gte('fecha', fmt(inicioMes)).lte('fecha', fmt(finMes));
   } else {
-    if (tiendaFilter) query = query.eq('sucursal_id', tiendaFilter);
+    // v1.15.4 — Varias tiendas: el filtro viaja a Supabase con IN, así
+    // solo llegan los pedidos de las sucursales marcadas.
+    if (tiendaSel.length) query = query.in('sucursal_id', tiendaSel);
 
     // Rango de fechas para Bodega/Admin/Gerencia. Cada extremo es
     // independiente: dejar uno vacío deja ese lado abierto.
