@@ -1,0 +1,34 @@
+{
+  "hero": {
+    "archivo": "hero-cebolla.webp",
+    "alt": "Cebolla morada en canasta de madera",
+    "posicion": "center",
+    "credito": ""
+  },
+  "galeria": [
+    {
+      "archivo": "operacion-bodega.webp",
+      "pie": "Lechuga y jitomate listos para surtido"
+    },
+    {
+      "archivo": "operacion-invernadero.webp",
+      "pie": "Invernadero de uno de nuestros proveedores"
+    },
+    {
+      "archivo": "operacion-racimo.webp",
+      "pie": "Jitomate en desarrollo, directo de productor"
+    },
+    {
+      "archivo": "operacion-cajas-jitomate.webp",
+      "pie": "Jitomate seleccionado y empacado"
+    },
+    {
+      "archivo": "operacion-lechuga-empaque.webp",
+      "pie": "Lechuga hidropónica empacada"
+    },
+    {
+      "archivo": "operacion-lechuga.webp",
+      "pie": "Lechuga fresca, revisada antes de salir"
+    }
+  ]
+}
